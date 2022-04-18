@@ -41,6 +41,8 @@ gen_syntax_enum! [ pub SyntaxType |
     SideEffectExpr,
     GroupedExpr,
     ReturnExpr,
+    ContinueExpr,
+    BreakExpr,
     IfExpr,
     LoopExpr,
     InfiLoopExpr,
@@ -63,6 +65,8 @@ gen_syntax_enum! [ pub SyntaxType |
     r#if,
     r#else,
     r#return,
+    r#continue,
+    r#break,
     lit_char,
     lit_str,
     lit_rawstr,
@@ -70,8 +74,8 @@ gen_syntax_enum! [ pub SyntaxType |
     lit_float,
     lit_bool,
     cmd,
-    add2,
-    sub2,
+    inc,
+    dec,
     add,
     sub,
     mul,
@@ -133,6 +137,7 @@ impl SyntaxNode {
 pub struct Parser {
     cursor: usize,
     tokens: Vec<Token>,
+    eof: Token
 }
 
 #[allow(unused)]
@@ -187,7 +192,7 @@ pub fn parse(tokens: Vec<Token>, srcfile: &SrcFileInfo) -> ParseResult {
 
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
-        Self { cursor: 0, tokens }
+        Self { cursor: 0, tokens, eof: Token::eof() }
     }
 
     fn unchecked_advance(&mut self) -> Token {
@@ -233,7 +238,8 @@ impl Parser {
         let detected_cursor = self.cursor + offset;
 
         if detected_cursor >= self.tokens.len() {
-            panic!("cursor has reached end");
+            return &self.eof;
+            // panic!("cursor has reached end");
         }
 
         &self.tokens[detected_cursor]
@@ -303,17 +309,6 @@ impl Parser {
             Ok(tok)
         }
     }
-
-    fn skip_semi(&mut self) {
-        loop {
-            if self.peek1_t().check_name("semi") {
-                self.unchecked_advance();
-            }
-            else {
-                break;
-            }
-        }
-    }
 }
 
 
@@ -336,7 +331,7 @@ mod tests {
         let tokens = tokenize(&src)?;
         let tt = parse(tokens, &src)?;
 
-        println!("{:#?}", tt);
+        println!("{:?}", tt);
 
         Ok(())
     }

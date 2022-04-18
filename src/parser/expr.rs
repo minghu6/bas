@@ -14,8 +14,20 @@ impl Parser {
 
         loop {
             let tok1 = self.peek1_t();
-            let mut ty = ST::eof;
-            let mut tt = box SN::E(Token::eof());
+            let ty;
+            let tt;
+
+            #[cfg(test)]
+            #[allow(unused)]
+            {
+                let tok1_name = tok1.name_string();
+                let tok1_value = tok1.value_string();
+
+                if !self.is_end() {
+                    let tok2_name = self.peek2_t().name_string();
+                    let tok2_value = self.peek2_t().value_string();
+                }
+            }
 
             /* ExprBlk */
             if tok1.check_name("if") {
@@ -58,13 +70,22 @@ impl Parser {
             else if tok1.check_name("id") {
                 let tok2 = self.peek2_t();
 
-                if tok2.check_name("colon") {
-                    ty = ST::PathExpr;
-                    tt = box SN::T(self.parse_path_expr()?);
-                } else if tok2.check_names_in(&["add2", "sub2"]) {
+                if tok2.check_names_in(&["inc", "dec"]) {
                     ty = ST::SideEffectExpr;
                     tt = box SN::T(self.parse_side_effect_expr()?);
                 }
+                else {
+                    ty = ST::PathExpr;
+                    tt = box SN::T(self.parse_path_expr()?);
+                }
+            } else if tok1.check_name("continue") {
+                // ty = ST::ContinueExpr;
+                // tt = box SN::T(self.parse_return_expr()?);
+                todo!()
+            } else if tok1.check_name("break") {
+                // ty = ST::BreakExpr;
+                // tt = box SN::T(self.parse_return_expr()?);
+                todo!()
             } else if tok1.check_name("return") {
                 ty = ST::ReturnExpr;
                 tt = box SN::T(self.parse_return_expr()?);
@@ -283,6 +304,10 @@ impl Parser {
             expr_units.push((ty, tt));
         }
 
+        if expr_units.is_empty() {
+            return Err(R::Unrecognized { four: ST::Expr, found: *self.peek1_t() })
+        }
+
         if ops.is_empty() {
             debug_assert_eq!(expr_units.len(), 1);
             Ok(TokenTree::new(expr_units))
@@ -308,13 +333,20 @@ impl Parser {
         let mut subs = vec![];
 
         self.expect_eat_tok1_t(ST::r#if, four)?;
-        subs.push((ST::ExprSpan, box SN::T(self.parse_expr()?)));
+        subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
+        subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));
+
+        #[cfg(test)]
+        {
+            let _tok_name = self.peek1_t().name_string();
+            let _tok_value = self.peek1_t().value_string();
+        }
 
         if self.peek1_t().check_name("else") {
             self.unchecked_advance();
             let lookhead1 = self.peek1_t();
 
-            if lookhead1.check_name("lparen") {
+            if lookhead1.check_name("lbrace") {
                 subs.push((
                     ST::BlockExpr,
                     box SN::T(self.parse_block_expr()?),
@@ -387,7 +419,7 @@ impl Parser {
         let mut subs = vec![];
 
         self.expect_eat_tok1_t(ST::r#return, four)?;
-        if self.peek1_t().check_names_in(&["semi", "rbrace"]) {
+        if !self.peek1_t().check_names_in(&["semi", "rbrace"]) {
             subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
         }
 
@@ -415,21 +447,21 @@ impl Parser {
         if tok1.check_name("id") {
             subs.push((ST::id, box SN::E(self.unchecked_advance())));
 
-            if self.peek1_t().check_name("add2") {
-                subs.push((ST::add2, box SN::E(self.unchecked_advance())));
-            } else if self.peek1_t().check_name("sub2") {
-                subs.push((ST::sub2, box SN::E(self.unchecked_advance())));
+            if self.peek1_t().check_name("inc") {
+                subs.push((ST::inc, box SN::E(self.unchecked_advance())));
+            } else if self.peek1_t().check_name("dec") {
+                subs.push((ST::dec, box SN::E(self.unchecked_advance())));
             } else {
                 return Err(R::Unrecognized {
                     four,
                     found: self.unchecked_advance(),
                 });
             }
-        } else if tok1.check_name("add2") {
-            subs.push((ST::add2, box SN::E(self.unchecked_advance())));
+        } else if tok1.check_name("inc") {
+            subs.push((ST::inc, box SN::E(self.unchecked_advance())));
             subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
-        } else if tok1.check_name("sub2") {
-            subs.push((ST::sub2, box SN::E(self.unchecked_advance())));
+        } else if tok1.check_name("dec") {
+            subs.push((ST::dec, box SN::E(self.unchecked_advance())));
             subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
         }
 

@@ -77,16 +77,19 @@ fn cmd_m(source: &str, from: usize) -> Option<TokenMatchResult> {
 lazy_static::lazy_static! {
     static ref BLANK_TOK_SET: HashSet<&'static str> = hashset! {
         "sp",
+        "newline",
         "sharp_line_comment"
     };
     static ref KEY_SET: Vec<&'static str> = vec! {
         "fn",
         "return",
         "if",
+        "else",
         "loop",
         "while",
         "break",
-        "continue"
+        "continue",
+        "let"
     };
 }
 
@@ -97,12 +100,9 @@ pub(crate) fn tokenize(source: &SrcFileInfo) -> TokenizeResult {
             .into_iter()
             .filter(|tok| !BLANK_TOK_SET.contains(&tok.name_string().as_str()))
             .map(|tok| {
-                if tok.check_name("newline") {
-                    tok.rename("semi")
-                } else {
-                    tok.rename_by_value(&KEY_SET)
-                }
+                tok.rename_by_value(&KEY_SET)
             })
+            // .chain([Token::eof()])
             .collect::<Vec<Token>>())
     })
 }

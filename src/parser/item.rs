@@ -7,8 +7,6 @@ use super::{
 
 impl Parser {
     pub(crate) fn parse_item(&mut self) -> ParseResult2 {
-        self.skip_semi();
-
         let four = ST::Item;
         let tok1 = self.peek1_t();
 

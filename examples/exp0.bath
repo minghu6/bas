@@ -1,20 +1,21 @@
 # This is Main Entry
 fn main() -> i32 {
-    !(echo -n Count :)
-    !(tput sc)
+    !(echo -n Count :);
+    !(tput sc);
 
-    let count = 0
+    let count = 0;
+#   let tmp = 2 + 3  * 4 - 2;
 
     loop {
         if count < 40 {
-            count++
-            !(sleep 1)
-            !(tput rc)
-            !(tput ed)
-            !(echo -n $count)
+            count++;
+            !(sleep 1);
+            !(tput rc);
+            !(tput ed);
+            !(echo -n $count);
         }
         else {
-            return 0
+            return 0;
         }
     }
 }

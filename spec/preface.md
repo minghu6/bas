@@ -131,10 +131,10 @@ CmdExpr:
   | <cmd>
 
 SideEffectExpr:
-  | <add2> <id>
-  | <sub2> <id>
-  | <id> <add2>
-  | <id> <sub2>
+  | <inc> <id>
+  | <dec> <id>
+  | <id> <inc>
+  | <id> <dec>
 
 Type:
   | <id>
