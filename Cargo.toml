@@ -1,0 +1,21 @@
+cargo-features = ["different-binary-name"]
+
+[package]
+name = "bas"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+inkwellkit = { path = "../inkwellkit", features = ["llvm12-0"] }
+m6lexerkit = { path = "../m6lexerkit" }
+m6parserkit = { path = "../m6parserkit" }
+clap = { version = "^3", features = ["derive"] }
+clap_complete = "3.1.1"
+shellexpand = "2.1"
+
+maplit = "1"
+
+[[bin]]
+name = "basc"
+path = "bin/basc.rs"
