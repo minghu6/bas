@@ -111,8 +111,8 @@ gen_syntax_enum! [ pub SyntaxType |
 
 #[allow(unused)]
 #[derive(Debug)]
-pub struct TokenTree {
-    subs: Vec<(SyntaxType, Box<SyntaxNode>)>,
+pub(crate) struct TokenTree {
+    pub(crate) subs: Vec<(SyntaxType, Box<SyntaxNode>)>,
 }
 
 impl TokenTree {
@@ -122,7 +122,7 @@ impl TokenTree {
 }
 
 #[derive(Debug)]
-pub enum SyntaxNode {
+pub(crate) enum SyntaxNode {
     T(TokenTree),
     E(Token),
 }
@@ -182,7 +182,7 @@ impl ParseErrorReason {
     }
 }
 
-pub fn parse(tokens: Vec<Token>, srcfile: &SrcFileInfo) -> ParseResult {
+pub(crate) fn parse(tokens: Vec<Token>, srcfile: &SrcFileInfo) -> ParseResult {
     let mut parser = Parser::new(tokens);
 
     parser.parse(srcfile)
@@ -278,11 +278,19 @@ impl Parser {
         self.expect_eat_tok1_t(SyntaxType::id, four)
     }
 
+    #[allow(unused)]
     fn expect_eat_comma_t(
         &mut self,
         four: SyntaxType,
     ) -> Result<Token, ParseErrorReason> {
         self.expect_eat_tok1_t(SyntaxType::comma, four)
+    }
+
+    fn expect_eat_colon_t(
+        &mut self,
+        four: SyntaxType,
+    ) -> Result<Token, ParseErrorReason> {
+        self.expect_eat_tok1_t(SyntaxType::colon, four)
     }
 
     fn expect_eat_semi_t(

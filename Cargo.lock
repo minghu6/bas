@@ -45,10 +45,14 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "clap_complete",
+ "either",
+ "indexmap",
  "inkwellkit",
+ "m6coll",
  "m6lexerkit",
  "m6parserkit",
  "maplit",
+ "regex",
  "shellexpand",
 ]
 
@@ -291,6 +295,35 @@ dependencies = [
  "autocfg",
  "scopeguard",
 ]
+
+[[package]]
+name = "m6arr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ceef37440dd8a758ae53b14194c3784d8c94a04ff642328b68c4fd54e0eea475"
+
+[[package]]
+name = "m6bitmap"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b250180b70353123f8c77c570a6f216faa64418a6c127ea97fb989a66a91d6c8"
+
+[[package]]
+name = "m6coll"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60ddaf2fc92a7f129deb9b49f8e86b29a9017ffdd8c58be7918d9f67e40a2676"
+dependencies = [
+ "m6arr",
+ "m6bitmap",
+ "m6entry",
+]
+
+[[package]]
+name = "m6entry"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea32f10b0067fa7d844cf50ea6ed34f48707ad81fbd67d54f7cd818c1a430026"
 
 [[package]]
 name = "m6lexerkit"

@@ -47,22 +47,22 @@ impl Parser {
             }
             /* ExprSpan */
             // LitExpr
-            else if tok1.check_name("lit_char") {
+            else if tok1.check_name("lit_char") {  // u32 in memorry
                 ty = ST::lit_char;
                 tt = box SN::E(self.unchecked_advance());
-            } else if tok1.check_name("lit_str") {
+            } else if tok1.check_name("lit_str") {  // char*
                 ty = ST::lit_str;
                 tt = box SN::E(self.unchecked_advance());
-            } else if tok1.check_name("lit_rawstr") {
+            } else if tok1.check_name("lit_rawstr") {  // encoded char*
                 ty = ST::lit_rawstr;
                 tt = box SN::E(self.unchecked_advance());
-            } else if tok1.check_name("lit_int") {
+            } else if tok1.check_name("lit_int") {  // i32
                 ty = ST::lit_int;
                 tt = box SN::E(self.unchecked_advance());
-            } else if tok1.check_name("lit_float") {
+            } else if tok1.check_name("lit_float") {  // f64
                 ty = ST::lit_float;
                 tt = box SN::E(self.unchecked_advance());
-            } else if tok1.check_name("lit_bool") {
+            } else if tok1.check_name("lit_bool") {  // u8
                 ty = ST::lit_bool;
                 tt = box SN::E(self.unchecked_advance());
             }
@@ -331,8 +331,10 @@ impl Parser {
     pub(crate) fn parse_if_expr(&mut self) -> ParseResult2 {
         let four = ST::IfExpr;
         let mut subs = vec![];
-
-        self.expect_eat_tok1_t(ST::r#if, four)?;
+        subs.push((
+            ST::r#if,
+            box SN::E(self.expect_eat_tok1_t(ST::r#if, four)?))
+        );
         subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
         subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));
 
@@ -352,7 +354,7 @@ impl Parser {
                     box SN::T(self.parse_block_expr()?),
                 ));
             } else if lookhead1.check_name("if") {
-                subs.push((ST::BlockExpr, box SN::T(self.parse_if_expr()?)));
+                subs.push((ST::IfExpr, box SN::T(self.parse_if_expr()?)));
             } else {
                 return Err(R::Unrecognized {
                     four: ST::r#else,

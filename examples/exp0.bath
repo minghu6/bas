@@ -1,5 +1,5 @@
 # This is Main Entry
-fn main() -> i32 {
+fn main() -> int {
     !(echo -n Count :);
     !(tput sc);
 

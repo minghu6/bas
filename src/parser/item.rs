@@ -100,7 +100,7 @@ impl Parser {
                         R::Expect { expect: ST::FnParam, four, found: Token::eof() }
                     );
                 }
-
+                // Differ Function Declaration and Function Definition.
                 if self.tokens[i+1].check_name("colon") {
                     subs.push((
                         ST::FnParamPat,
@@ -123,7 +123,7 @@ impl Parser {
         let mut subs = vec![];
 
         subs.push((ST::PatNoTop, box SN::T(self.parse_pat_no_top()?)));
-        self.expect_eat_comma_t(ST::comma)?;
+        self.expect_eat_colon_t(ST::FnParamPat)?;
         subs.push((ST::Type, box SN::T(self.parse_ty()?)));
 
         return Ok(TokenTree::new(subs));

@@ -2,7 +2,7 @@ use std::{error::Error, path::Path, time::{SystemTime, UNIX_EPOCH}};
 
 use m6lexerkit::SrcFileInfo;
 
-use crate::{lexer::tokenize, parser::parse};
+use crate::{lexer::tokenize, parser::parse, ast_lowering::semantic_analyze};
 
 pub struct RunCompiler {}
 
@@ -20,7 +20,8 @@ impl RunCompiler {
         let src = SrcFileInfo::new(src)?;
 
         let tokens = tokenize(&src)?;
-        let _tt = parse(tokens, &src)?;
+        let tt = parse(tokens, &src)?;
+        let _amod = semantic_analyze(tt, &src)?;
 
         Ok(Self {})
     }
