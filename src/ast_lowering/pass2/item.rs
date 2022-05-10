@@ -1,4 +1,4 @@
-use m6lexerkit::Symbol;
+use m6lexerkit::{Symbol, sym2str};
 
 use crate::ast_lowering::{ MIR, AVal };
 use crate::parser::{SyntaxType as ST, TokenTree};
@@ -14,7 +14,11 @@ impl SemanticAnalyzerPass2 {
         let ascope_idx = self.push_new_scope();
         let ascope = &mut self.amod.scopes[ascope_idx];
 
-        let afn = self.amod.afns.get(&fn_name).unwrap();
+        let afn = if let Some(afn) = self.amod.afns.get(&fn_name) {
+            afn
+        } else {
+            unreachable!("undef fnname {}", sym2str(fn_name))
+        };
 
         for (i, param_pat) in afn.params.iter().enumerate() {
             ascope.mirs.push(MIR {

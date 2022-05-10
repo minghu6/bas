@@ -18,23 +18,14 @@ genlib:
 testexp0: getbasc
 	@ ./${BARE_COMPILER} ./examples/exp0.bath
 
-testllvm_iodemo:
-	cargo test -- --nocapture test_io
-
-testllvm_iterarray:
-	cargo test -- --nocapture test_llvm_iterarray
-
-testllvm_doseq:
-	cargo test -- --nocapture test_llvm_doseq
-
 testlex:
 	cargo test -- --nocapture test_lex
 
 testparser:
 	cargo test -- --nocapture test_parser
 
-testmls:
-	cargo test -- --nocapture test_ml_simplifier
+testanalyze:
+	RUST_BACKTRACE=1 cargo test -- --nocapture test_analyze
 
 testcodegen:
 	cargo test -- --nocapture test_codegen

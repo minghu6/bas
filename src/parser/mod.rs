@@ -109,8 +109,6 @@ gen_syntax_enum! [ pub SyntaxType |
     eof
 ];
 
-#[allow(unused)]
-#[derive(Debug)]
 pub(crate) struct TokenTree {
     pub(crate) subs: Vec<(SyntaxType, Box<SyntaxNode>)>,
 }
@@ -118,6 +116,24 @@ pub(crate) struct TokenTree {
 impl TokenTree {
     pub(super) fn new(subs: Vec<(SyntaxType, Box<SyntaxNode>)>) -> Self {
         Self { subs }
+    }
+}
+
+impl std::fmt::Debug for TokenTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+
+        let mut dbs = &mut f.debug_tuple("=>");
+
+        for (ty, sn) in self.subs.iter() {
+            dbs = dbs.field(ty);
+
+            match &**sn {
+                SyntaxNode::T(tt) => dbs = dbs.field(&tt),
+                SyntaxNode::E(tok) => dbs = dbs.field(&tok),
+            }
+        }
+
+        dbs.finish()
     }
 }
 
@@ -339,7 +355,7 @@ mod tests {
         let tokens = tokenize(&src)?;
         let tt = parse(tokens, &src)?;
 
-        println!("{:?}", tt);
+        println!("{:#?}", tt);
 
         Ok(())
     }

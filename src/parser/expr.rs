@@ -48,23 +48,41 @@ impl Parser {
             /* ExprSpan */
             // LitExpr
             else if tok1.check_name("lit_char") {  // u32 in memorry
-                ty = ST::lit_char;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_char,
+                    box SN::E(self.unchecked_advance())
+                )]));
             } else if tok1.check_name("lit_str") {  // char*
-                ty = ST::lit_str;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_str,
+                    box SN::E(self.unchecked_advance())
+                )]));
             } else if tok1.check_name("lit_rawstr") {  // encoded char*
-                ty = ST::lit_rawstr;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_rawstr,
+                    box SN::E(self.unchecked_advance())
+                )]));
             } else if tok1.check_name("lit_int") {  // i32
-                ty = ST::lit_int;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_int,
+                    box SN::E(self.unchecked_advance())
+                )]));
             } else if tok1.check_name("lit_float") {  // f64
-                ty = ST::lit_float;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_float,
+                    box SN::E(self.unchecked_advance())
+                )]));
             } else if tok1.check_name("lit_bool") {  // u8
-                ty = ST::lit_bool;
-                tt = box SN::E(self.unchecked_advance());
+                ty = ST::LitExpr;
+                tt = box SN::T(TokenTree::new(vec![(
+                    ST::lit_bool,
+                    box SN::E(self.unchecked_advance())
+                )]));
             }
             // PathExpr | SideEffectExpr
             else if tok1.check_name("id") {

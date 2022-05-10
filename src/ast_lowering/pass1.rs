@@ -3,7 +3,7 @@ use std::rc::Rc;
 use m6lexerkit::{Token, Symbol};
 
 use super::{AMod, AnalyzeResult2, DiagnosisItem2, AType, APriType, DiagnosisType as R, AFn, AParamPat};
-use crate::parser::{SyntaxType as ST, SyntaxNode as SN, TokenTree};
+use crate::{parser::{SyntaxType as ST, SyntaxNode as SN, TokenTree}, ast_lowering::{aty_i32, aty_f64}};
 
 
 pub(crate) struct SemanticAnalyzerPass1 {
@@ -53,7 +53,7 @@ impl SemanticAnalyzerPass1 {
         let mut sns = tt.subs.iter().peekable();
 
         let idt = *sns.next().unwrap().1.as_tok();
-        let fn_name = idt.name;
+        let fn_name = idt.value;
 
         if let Some(afn) = self.amod.afns.get(&fn_name) {
             self.write_dialogsis(
@@ -85,6 +85,8 @@ impl SemanticAnalyzerPass1 {
             params,
             ret,
         };
+
+        // println!("{:?}", afn);
 
         self.amod.afns.insert(fn_name, afn);
     }
@@ -129,17 +131,17 @@ impl SemanticAnalyzerPass1 {
             SN::E(tok) => {
                 // analyze alias -- skip (inner multiple scan)
                 if tok.check_value("int") {
-                    return AType::Pri(APriType::Int)
+                    return aty_i32();
                 }
                 if tok.check_value("float") {
-                    return AType::Pri(APriType::F64);
+                    return aty_f64();
                 }
                 if tok.check_value("str") {
                     return AType::Pri(APriType::Str);
                 }
 
                 todo!("ty: {}", tok);
-            },
+            }
         }
     }
 
