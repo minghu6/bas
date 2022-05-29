@@ -5,6 +5,8 @@ use std::cmp::{max, min};
 use std::rc::Rc;
 
 use indexmap::{indexmap, IndexMap};
+use inkwellkit::get_ctx;
+use inkwellkit::types::{FloatType, IntType};
 use m6coll::Entry;
 use m6lexerkit::{str2sym, sym2str, SrcFileInfo, SrcLoc, Symbol, Token};
 use pass1::SemanticAnalyzerPass1;
@@ -24,6 +26,36 @@ pub enum APriType {
     Str,       // C string
     // Char,  // u32
     OpaqueStruct(Symbol), // opaque struct pointer type
+}
+
+impl APriType {
+    pub(crate) fn as_float_ty<'ctx>(&self) -> FloatType<'ctx> {
+        let ctx = get_ctx();
+        match self {
+            Self::Float(i8) => {
+                match i8 {
+                    4 => ctx.f32_type(),
+                    8 => ctx.f64_type(),
+                    _ => unimplemented!()
+                }
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn as_int_ty<'ctx>(&self) -> IntType<'ctx> {
+        let ctx = get_ctx();
+        match self {
+            Self::Int(i8) => {
+                match i8 {
+                    4 => ctx.i32_type(),
+                    8 => ctx.i64_type(),
+                    _ => unimplemented!()
+                }
+            },
+            _ => unreachable!(),
+        }
+    }
 }
 
 pub(crate) const fn aty_str() -> AType {
@@ -105,16 +137,18 @@ impl AType {
             _ => unreachable!("op: {:#?}", op),
         }
     }
+
+
 }
 
-pub(crate) struct AFn {
+pub(crate) struct AFnDec {
     idt: Token, // Identifier Token
-    name: Symbol,
-    params: Vec<AParamPat>,
-    ret: AType,
+    pub(crate) name: Symbol,
+    pub(crate) params: Vec<AParamPat>,
+    pub(crate) ret: AType,
 }
 
-impl std::fmt::Debug for AFn {
+impl std::fmt::Debug for AFnDec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AFn")
             .field("name", &sym2str(self.name))
@@ -124,13 +158,13 @@ impl std::fmt::Debug for AFn {
     }
 }
 
-impl AFn {}
+impl AFnDec {}
 
 #[derive(Debug)]
 pub(crate) struct AMod {
-    name: Symbol,
-    afns: IndexMap<Symbol, AFn>,
-    scopes: Vec<AScope>, // Start from Root Scope
+    pub(crate) name: Symbol,
+    pub(crate) afns: IndexMap<Symbol, AFnDec>,
+    pub(crate) scopes: Vec<AScope>, // Start from Root Scope
 }
 
 impl AMod {
@@ -145,8 +179,8 @@ impl AMod {
 
 #[derive(Debug, Clone)]
 pub(crate) struct AVar {
-    ty: AType,
-    val: AVal, // MIR usize
+    pub(crate) ty: AType,
+    pub(crate) val: AVal, // MIR usize
 }
 
 impl AVar {
@@ -172,6 +206,28 @@ impl Default for AVar {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct ASymDef {
+    pub(crate) name: Symbol,
+    pub(crate) ty: AType,
+}
+
+impl ASymDef {
+    pub(crate) fn new(name: Symbol, ty: AType) -> Self {
+        Self {
+            name,
+            ty,
+        }
+    }
+
+    pub(crate) fn undefined() -> Self {
+        Self {
+            name: str2sym(""),
+            ty: AType::PH,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum ConstVal {
     Int(i32),
     Float(f64),
@@ -181,19 +237,28 @@ pub(crate) enum ConstVal {
 
 #[derive(Debug, Clone)]
 pub(crate) enum AVal {
+    DefFn {
+        name: Symbol,
+        scope_idx: usize
+    },
     IfBlock {
         if_exprs: Vec<(Symbol, usize)>, // (cond, then-block)
         else_blk: Option<usize>,        // else block (scope idx)
     },
+    InfiLoopExpr(usize),
     BlockExpr(usize), // Scope idx
-    FnParam(usize),
+    FnParam(u32),
     FnCall {
         call_fn: Symbol,
         args: Vec<Symbol>,
     },
     BOpExpr {
-        op: Option<ST>,
+        op: ST,
         operands: Vec<Symbol>,
+    },
+    TypeCast {
+        name: Symbol,
+        ty: AType
     },
     ConstAlias(ConstVal),
     Break,
@@ -211,22 +276,22 @@ impl AVal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct MIR {
     // SSA
-    name: Symbol,
-    ty: AType,
-    val: AVal,
+    pub(crate) name: Symbol,
+    pub(crate) ty: AType,
+    pub(crate) val: AVal,
 }
 
 impl MIR {
-    fn undefined(name: Symbol) -> Self {
-        Self {
-            name,
-            ty: AType::PH,
-            val: AVal::PH,
-        }
-    }
+    // fn undefined(name: Symbol) -> Self {
+    //     Self {
+    //         name,
+    //         ty: AType::PH,
+    //         val: AVal::PH,
+    //     }
+    // }
 
     fn side_effect(val: AVal) -> Self {
         Self {
@@ -254,10 +319,11 @@ impl MIR {
 
 #[derive(Default)]
 pub(crate) struct AScope {
-    paren: Option<usize>, // Scope id, 0 means root, -1 means None
-    explicit_bindings: Vec<Entry<Symbol, usize>>,
-    implicit_bindings: IndexMap<Symbol, usize>,
-    mirs: Vec<MIR>,
+    pub(crate) paren: Option<usize>,
+    pub(crate) explicit_bindings: Vec<Entry<Symbol, usize>>,
+    pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
+    pub(crate) mirs: Vec<MIR>,
+    pub(crate) ret: Option<AVar>
 }
 
 impl AScope {
@@ -281,14 +347,6 @@ impl AScope {
             .find(|Entry(sym, _mir_idx)| sym == q)
             .and_then(|Entry(_sym, mir_idx)| Some(self.mirs[*mir_idx].var()))
     }
-
-    // pub(crate) fn in_scope_find_sym(&self, q: &Symbol) -> Option<AVar> {
-    //     self.explicit_bindings
-    //     .iter()
-    //     .rev()
-    //     .find(|Entry(sym, mir_idx)| sym == q)
-    //     .and_then(|Entry(sym, mir_idx)| Some(self.mirs[*mir_idx].var()))
-    // }
 }
 
 impl std::fmt::Debug for AScope {
@@ -317,8 +375,8 @@ impl std::fmt::Debug for AScope {
 
 #[derive(Debug)]
 pub(crate) struct AParamPat {
-    formal: Symbol,
-    ty: AType,
+    pub(crate) formal: Symbol,
+    pub(crate) ty: AType,
 }
 
 impl AParamPat {

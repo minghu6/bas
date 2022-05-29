@@ -48,6 +48,7 @@ dependencies = [
  "either",
  "indexmap",
  "inkwellkit",
+ "itertools",
  "m6coll",
  "m6lexerkit",
  "m6parserkit",
@@ -232,7 +233,6 @@ dependencies = [
 [[package]]
 name = "inkwell"
 version = "0.1.0"
-source = "git+https://github.com/minghu6/inkwell?branch=m6#27d8b510deef9d185f1e0dc908b880aa82689792"
 dependencies = [
  "either",
  "inkwell_internals",
@@ -245,7 +245,6 @@ dependencies = [
 [[package]]
 name = "inkwell_internals"
 version = "0.5.0"
-source = "git+https://github.com/minghu6/inkwell?branch=m6#27d8b510deef9d185f1e0dc908b880aa82689792"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -256,9 +255,19 @@ dependencies = [
 name = "inkwellkit"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "either",
  "inkwell",
  "proc_macros",
+]
+
+[[package]]
+name = "itertools"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
+dependencies = [
+ "either",
 ]
 
 [[package]]

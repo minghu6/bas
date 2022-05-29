@@ -1,8 +1,6 @@
-use m6coll::Entry;
-
 use super::SemanticAnalyzerPass2;
 use crate::{
-    ast_lowering::{MIR, AVar},
+    ast_lowering::AVar,
     parser::{SyntaxType as ST, TokenTree},
 };
 

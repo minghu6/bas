@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
-use clap::{IntoApp, Parser, Subcommand};
+use clap::{IntoApp, Parser};
 use clap_complete::Shell;
 
 use bas::shell::gen_completions;
 use bas::driver::RunCompiler;
+
+use inkwellkit::config::*;
 
 /// Bas Lang Compiler
 #[derive(Parser)]
@@ -14,16 +16,26 @@ struct Cli {
     #[clap(long = "generate", arg_enum)]
     generator: Option<Shell>,
 
-    #[clap(subcommand)]
-    command: Option<SubCommand>,
+    // #[clap(subcommand)]
+    // command: Option<SubCommand>,
 
-    src: PathBuf
+    #[clap(short = 'O', arg_enum)]
+    opt: Option<OptLv>,
 
+    #[clap(short = 't', long = "target_type", arg_enum)]
+    target_type: Option<TargetType>,
+
+    #[clap(short = 'e', long = "emit_type", arg_enum)]
+    emit_type: Option<EmitType>,
+
+    src: PathBuf,
+
+    output: PathBuf
 }
 
-#[derive(Subcommand)]
-enum SubCommand {
-}
+// #[derive(Subcommand)]
+// enum SubCommand {
+// }
 
 // fn format_u32_str(s: &str) -> Result<u32, String> {
 //     let s = s.replace("_", "");
@@ -39,12 +51,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    if let Some(command) = cli.command {
-        match command {
-        }
+    let optlv = cli.opt.unwrap_or(OptLv::Debug);
+    let target_type = cli.target_type.unwrap_or(TargetType::Bin);
+    let emit_type = cli.emit_type.unwrap_or(EmitType::Obj);
+    let print_type = if cli.output == PathBuf::from("stderr") {
+        PrintTy::StdErr
     }
+    else {
+        PrintTy::File(cli.output)
+    };
 
-    RunCompiler::new(&cli.src)?;
+    let config = CompilerConfig {
+        optlv,
+        target_type,
+        emit_type,
+        print_type,
+    };
+
+    RunCompiler::new(&cli.src, config)?;
 
     Ok(())
 }

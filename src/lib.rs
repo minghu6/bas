@@ -12,5 +12,6 @@ mod lexer;
 mod parser;
 pub mod driver;
 mod ast_lowering;
+mod codegen;
 pub mod shell;
 pub(crate) mod aux;

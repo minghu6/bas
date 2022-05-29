@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use m6lexerkit::{Token, Symbol};
 
-use super::{AMod, AnalyzeResult2, DiagnosisItem2, AType, APriType, DiagnosisType as R, AFn, AParamPat};
+use super::{AMod, AnalyzeResult2, DiagnosisItem2, AType, APriType, DiagnosisType as R, AFnDec, AParamPat};
 use crate::{parser::{SyntaxType as ST, SyntaxNode as SN, TokenTree}, ast_lowering::{aty_i32, aty_f64}};
 
 
@@ -79,7 +79,7 @@ impl SemanticAnalyzerPass1 {
             ret = AType::Void;
         }
 
-        let afn = AFn {
+        let afn = AFnDec {
             idt,
             name: fn_name,
             params,

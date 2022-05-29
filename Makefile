@@ -3,7 +3,7 @@ BARE_COMPILER=basc
 build:
 	@ cargo build
 
-copybin:
+copybin: build
 	@ cp ./target/debug/${BARE_COMPILER} .
 
 getbasc: build copybin

@@ -1,4 +1,4 @@
-use crate::ast_lowering::{AType, APriType, aty_int, aty_f64, aty_i32};
+use crate::ast_lowering::{AType, APriType, aty_f64, aty_i32};
 use crate::parser::SyntaxNode as SN;
 
 use super::SemanticAnalyzerPass2;
@@ -7,6 +7,7 @@ use super::SemanticAnalyzerPass2;
 
 impl SemanticAnalyzerPass2 {
 
+    #[allow(unused)]
     pub(crate) fn analyze_ty(&mut self, sn: &SN) -> AType {
         match sn {
             SN::T(_) => todo!(),
@@ -26,5 +27,4 @@ impl SemanticAnalyzerPass2 {
             }
         }
     }
-
 }

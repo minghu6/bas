@@ -1,9 +1,9 @@
 use m6lexerkit::lazy_static::lazy_static;
-use m6lexerkit::{str2sym, sym2str, Symbol, Token};
+use m6lexerkit::{str2sym, sym2str, Symbol};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
-use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str};
+use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef};
 use crate::{
     ast_lowering::{
         APriType, AType, AVal, AVar, ConstVal, DiagnosisType as R, MIR,
@@ -19,17 +19,29 @@ impl SemanticAnalyzerPass2 {
 
         if sns.peek().unwrap().0 == ST::OpExpr {
             let var1 = self.analyze_expr(sns.next().unwrap().1.as_tt());
-            // let __tmp_{} = var1
+            let sym1 = self.name_var(var1.clone());
+            let symdef1 = ASymDef::new(sym1, var1.ty.clone());
 
             let (bopty, bopsn) = sns.next().unwrap();
             let bop_tok = bopsn.as_tok();
 
-            let var2 = self.analyze_expr(sns.next().unwrap().1.as_tt());
+            /* TODO: Short Circuit Evaluation */
+            if *bopty == ST::and {
+                // if var1.val eq 0 { 0 } else { analyze_var2 }
+            }
 
-            let ty = self.lift_tys_or_diagnose(
+            if *bopty == ST::or {
+                // if var1.val ne 0 { 1 } else { analyze_var2 }
+            }
+
+            let var2 = self.analyze_expr(sns.next().unwrap().1.as_tt());
+            let sym2 = self.name_var(var2.clone());
+            let symdef2 = ASymDef::new(sym2, var2.ty.clone());
+
+            let (res_symdef1, _res_symdef2) = self.lift_tys_or_diagnose(
                 *bopty,
-                var1.ty.clone(),
-                var2.ty.clone(),
+                symdef1,
+                symdef2,
                 *bop_tok,
             );
 
@@ -37,11 +49,11 @@ impl SemanticAnalyzerPass2 {
             let var2_sym = self.name_var(var2);
 
             let retval = AVal::BOpExpr {
-                op: Some(bopty.clone()),
+                op: bopty.clone(),
                 operands: vec![var1_sym, var2_sym],
             };
 
-            return AVar { ty, val: retval };
+            return AVar { ty: res_symdef1.ty.clone(), val: retval };
         }
 
         // Atom Expr
@@ -52,13 +64,13 @@ impl SemanticAnalyzerPass2 {
         match ty {
             ST::IfExpr => self.analyze_if_expr(tt),
             ST::InfiLoopExpr => self.analyze_infi_loop_expr(tt),
+            ST::BreakExpr => self.analyze_break_expr(tt),
+            ST::ContinueExpr => self.analyze_continue_expr(tt),
 
             ST::GroupedExpr => self.analyze_expr(&tt.subs[0].1.as_tt()),
             ST::LitExpr => self.analyze_lit_expr(tt),
             ST::PathExpr => self.analyze_path_expr(tt),
             ST::ReturnExpr => self.analyze_return_expr(tt),
-            ST::ContinueExpr => todo!(),
-            ST::BreakExpr => todo!(),
             ST::SideEffectExpr => self.analyze_side_effect_expr(tt),
             ST::CmdExpr => self.analyze_cmd_expr(tt),
 
@@ -172,31 +184,44 @@ impl SemanticAnalyzerPass2 {
             idt = *subs[1].1.as_tok();
             op = subs[0].0;
             fst_get = true;
-        }
-        else if subs[1].0 == ST::inc || subs[1].0 == ST::dec {
+        } else if subs[1].0 == ST::inc || subs[1].0 == ST::dec {
             idt = *subs[0].1.as_tok();
             op = subs[1].0;
             fst_get = false;
-        }
-        else {
+        } else {
             unreachable!("subs: {:#?}", subs)
         }
 
+        let op = if op == ST::inc { ST::add } else { ST::sub };
         let id = idt.value;
         let var = self.find_explicit_sym_or_diagnose(id, idt);
 
+        let const_ty = aty_i32();
+        let const_id = self.name_var(AVar {
+            ty: const_ty.clone(),
+            val: AVal::ConstAlias(ConstVal::Int(1)),
+        });
+
+        let (symdef1, symdef2) = self.lift_tys_or_diagnose(
+            op,
+            ASymDef::new(id, var.ty.clone()),
+            ASymDef {
+                name: const_id,
+                ty: const_ty,
+            },
+            idt,
+        );
+
         let val = AVal::BOpExpr {
-            op: Some(op),
-            operands: vec![id],
+            op,
+            operands: vec![symdef1.name, symdef2.name],
         };
-        let ty = self.lift_tys_or_diagnose(ST::add, var.ty.clone(), aty_i32(), idt);
-        let nxt_var = AVar { ty, val };
+        let nxt_var = AVar { ty: symdef1.ty.clone(), val };
         self.name_var(nxt_var.clone());
 
         if fst_get {
             var
-        }
-        else {
+        } else {
             nxt_var
         }
     }
@@ -246,6 +271,13 @@ impl SemanticAnalyzerPass2 {
         let val = AVal::FnCall {
             call_fn: str2sym("cmd_symbols_replace"),
             args: vec![arg0, arg1, arg2],
+        };
+
+        let cmd_sym = self.name_var(AVar { ty: aty_str(), val });
+
+        let val = AVal::FnCall {
+            call_fn: str2sym("exec"),
+            args: vec![cmd_sym],
         };
 
         AVar { ty: aty_str(), val }
@@ -319,7 +351,22 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn analyze_infi_loop_expr(&mut self, tt: &TokenTree) -> AVar {
-        self.analyze_block_expr(tt)
+        let var = self.analyze_block_expr(tt);
+
+        let val = AVal::InfiLoopExpr(var.val.as_block_expr_idx());
+
+        AVar {
+            ty: AType::Void,
+            val,
+        }
+    }
+
+    pub(crate) fn analyze_break_expr(&mut self, _tt: &TokenTree) -> AVar {
+        AVar { ty: AType::Void, val: AVal::Break }
+    }
+
+    pub(crate) fn analyze_continue_expr(&mut self, _tt: &TokenTree) -> AVar {
+        AVar { ty: AType::Void, val: AVal::Continue }
     }
 
     pub(crate) fn do_analyze_block_with_scope(
@@ -329,14 +376,13 @@ impl SemanticAnalyzerPass2 {
     ) {
         self.sc.push(scope_idx);
 
-        // println!("do analyze block with scope {:#?}", tt);
-
         for (ty, sn) in tt.subs[0].1.as_tt().subs.iter() {
             if *ty == ST::Stmt {
                 self.do_analyze_stmt(sn.as_tt());
             } else if *ty == ST::Expr {
                 // Stmts ret value
-                self.do_analyze_expr(sn.as_tt());
+                let retval = self.analyze_expr(sn.as_tt());
+                self.cur_scope_mut().ret = Some(retval);
                 break;
             } else {
                 unreachable!("{:#?}", ty)

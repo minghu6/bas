@@ -5,7 +5,7 @@ use m6lexerkit::{str2sym, Symbol, Token};
 
 use super::{
     aty_int, aty_opaque_struct, aty_str, AMod, APriType, AScope, AType, AVal,
-    AVar, AnalyzeResult2, ConstVal, DiagnosisItem2, DiagnosisType as R, MIR,
+    AVar, AnalyzeResult2, ConstVal, DiagnosisItem2, DiagnosisType as R, MIR, ASymDef,
 };
 use crate::parser::{SyntaxType as ST, TokenTree};
 
@@ -23,7 +23,7 @@ mod ty;
 ///
 pub(crate) struct SemanticAnalyzerPass2 {
     amod: AMod,
-    sc: Vec<usize>, // Scope Counter
+    sc: Vec<usize>,  // Scope Counter
     tt: Rc<TokenTree>,
     diagnosis: Vec<DiagnosisItem2>,
 }
@@ -121,19 +121,41 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn lift_tys_or_diagnose(
         &mut self,
         op: ST,
-        ty1: AType,
-        ty2: AType,
+        symdef1: ASymDef,
+        symdef2: ASymDef,
         idt: Token,
-    ) -> AType {
+    ) -> (ASymDef, ASymDef) {
+        // Insert Type Cast
+        let sym1 = symdef1.name;
+        let sym2 = symdef2.name;
+        let ty1 = symdef1.ty.clone();
+        let ty2 = symdef2.ty.clone();
+
         if let Ok(ty) = AType::lift_tys(op, ty1.clone(), ty2.clone()) {
-            ty
+
+            let mut res_sym_def1 = symdef1;
+            let mut res_sym_def2 = symdef2;
+
+            if ty1 != ty {
+                let val = AVal::TypeCast { name: sym1, ty: ty.clone() };
+                let res_sym1 = self.name_var(AVar { ty: ty.clone(), val });
+                res_sym_def1 = ASymDef { name: res_sym1, ty  };
+
+            } else if ty2 != ty {
+                let val = AVal::TypeCast { name: sym2, ty: ty.clone() };
+                let res_sym2 = self.name_var(AVar { ty: ty.clone(), val });
+                res_sym_def2 = ASymDef { name: res_sym2, ty  };
+            }
+
+            (res_sym_def1, res_sym_def2)
+
         } else {
             self.write_dialogsis(
-                R::IncompatiableOpType { op1: ty1, op2: ty2 },
+                R::IncompatiableOpType { op1: symdef1.ty, op2: symdef2.ty },
                 idt
             );
 
-            AType::PH
+            (ASymDef::undefined(), ASymDef::undefined())
         }
 
     }
