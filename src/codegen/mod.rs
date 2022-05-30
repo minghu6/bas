@@ -1,4 +1,4 @@
-use std::{error::Error};
+use std::error::Error;
 
 use indexmap::IndexMap;
 use inkwellkit::{
@@ -17,6 +17,7 @@ use m6lexerkit::{sym2str, Symbol};
 use crate::ast_lowering::{AMod, AScope};
 
 pub(crate) mod expr;
+pub(crate) mod include;
 pub(crate) mod item;
 mod targets;
 pub(crate) mod ty;
@@ -48,9 +49,7 @@ impl std::fmt::Display for CodeGenError {
 }
 impl Error for CodeGenError {}
 
-
 pub(crate) type CodeGenResult = Result<(), CodeGenError>;
-
 
 
 pub(crate) struct CodeGen<'ctx> {
@@ -126,7 +125,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn bind_bv(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
-        self.cur_blk_mut().explicit_bindings.push(Entry(sym, bv));
+        self.cur_blk_mut().bind_sym(sym, bv);
     }
 
     pub(crate) fn push_bb(&mut self, scope_idx: usize, bb: BasicBlock<'ctx>) {
@@ -165,6 +164,7 @@ impl<'ctx> CodeGen<'ctx> {
     // }
 }
 
+#[derive(Debug)]
 pub(crate) struct LogicBlock<'ctx> {
     pub(crate) paren: Option<usize>,
     pub(crate) bbs: Vec<BasicBlock<'ctx>>,
@@ -172,12 +172,16 @@ pub(crate) struct LogicBlock<'ctx> {
     pub(crate) implicit_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
 }
 
+pub(crate) fn is_implicit_sym(sym: &Symbol) -> bool {
+    sym2str(*sym).starts_with("!__tmp")
+}
+
 impl<'ctx> LogicBlock<'ctx> {
     pub(crate) fn in_scope_find_sym(
         &self,
         q: &Symbol,
     ) -> Option<BasicValueEnum<'ctx>> {
-        if sym2str(*q).starts_with("!__tmp") {
+        if is_implicit_sym(q) {
             // implicit_bindings
             self.implicit_bindings.get(q).cloned()
         } else {
@@ -186,6 +190,14 @@ impl<'ctx> LogicBlock<'ctx> {
                 .rev()
                 .find(|Entry(sym, _bv)| sym == q)
                 .and_then(|Entry(_sym, bv)| Some(*bv))
+        }
+    }
+
+    pub(crate) fn bind_sym(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
+        if is_implicit_sym(&sym) {
+            self.implicit_bindings.insert(sym, bv);
+        } else {
+            self.explicit_bindings.push(Entry(sym, bv));
         }
     }
 
@@ -245,6 +257,7 @@ pub(crate) fn sh_llvm_config(debug: bool) -> CompilerConfig {
 use std::path::PathBuf;
 
 #[cfg(test)]
+#[allow(unused)]
 pub(crate) fn sh_obj_config(debug: bool, path: PathBuf) -> CompilerConfig {
     CompilerConfig {
         optlv: if debug { OptLv::Debug } else { OptLv::Opt2 },
@@ -263,7 +276,7 @@ mod tests {
 
     use crate::{
         ast_lowering::semantic_analyze,
-        codegen::{ gen_code, sh_llvm_config },
+        codegen::{gen_code, sh_llvm_config},
         lexer::tokenize,
         parser::parse,
     };

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use m6lexerkit::{sym2str, Symbol};
 
 use super::CodeGen;
-use crate::ast_lowering::{APriType, AType, AVal, MIR, AVar};
+use crate::ast_lowering::{APriType, AType, AVal, MIR, AVar, ConstVal};
 use crate::parser::SyntaxType as ST;
 
 
@@ -33,7 +33,7 @@ impl<'ctx> CodeGen<'ctx> {
             AVal::BOpExpr { op, operands } => {
                 self.translate_bop_expr(op, operands)
             }
-            AVal::ConstAlias(_) => self.translate_break(),
+            AVal::ConstAlias(const_val) => self.translate_const_val(const_val),
             AVal::Break => self.translate_break(),
             AVal::Continue => self.translate_continue(),
             AVal::Return(sym_opt) => self.translate_return(sym_opt),
@@ -194,6 +194,20 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
 
+    fn translate_const_val(
+        &self,
+        const_val: ConstVal
+    ) -> BasicValueEnum<'ctx> {
+
+        match const_val {
+            ConstVal::Int(val) => self.vmmod.i32(val).into(),
+            ConstVal::Float(val) => self.vmmod.f64(val).into(),
+            ConstVal::Str(val) => self.vmmod.str(&sym2str(val)).into(),
+            ConstVal::Bool(val) => self.vmmod.bool(val).into(),
+        }
+
+    }
+
     fn translate_return(
         &self,
         sym_opt: Option<Symbol>,
@@ -229,11 +243,23 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> BasicValueEnum<'ctx> {
         let bv_args = args
             .into_iter()
-            .map(|sym| self.find_sym(&sym).unwrap().into())
+            .map(|sym| if let Some(bv) = self.find_sym(&sym) {
+                bv.into()
+            } else {
+                dbg!(self.cur_blk());
+
+                unreachable!("call {:?}, arg: {:?}", call_fn, sym)
+            }
+        )
             .collect_vec();
 
         let fnval_call =
-            self.vmmod.module.get_function(&sym2str(call_fn)).unwrap();
+            if let Some(fnval) = self.vmmod.module.get_function(&sym2str(call_fn)) {
+                fnval
+            }
+            else {
+                unreachable!("Unknown fn call: {:?}", call_fn);
+            };
 
         match self
             .builder
