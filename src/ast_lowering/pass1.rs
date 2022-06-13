@@ -81,14 +81,14 @@ impl SemanticAnalyzerPass1 {
 
         let afn = AFnDec {
             idt,
+            // body_idx: None,
             name: fn_name,
             params,
             ret,
         };
 
-        // println!("{:?}", afn);
-
         self.amod.afns.insert(fn_name, afn);
+
     }
 
     pub(crate) fn analyze_fn_param_pats(&mut self, tt: &TokenTree) -> Vec<AParamPat> {

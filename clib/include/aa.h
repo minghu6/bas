@@ -2,6 +2,7 @@
 
 #define AA_H
 
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef struct AssocArr* AssocArr;

@@ -48,8 +48,9 @@ void test_sym_replace() {
 
 void test_sh_call() {
   char* res;
-  res = exec("sh -c ls -a");
-  ps(res)
+  // res = exec("sh -c ls -a");
+  res = exec("echo -n Count :");
+  // ps(res)
 }
 
 void test_cstr() {

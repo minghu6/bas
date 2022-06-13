@@ -5,7 +5,7 @@ use itertools::Itertools;
 use m6lexerkit::{sym2str, Symbol};
 
 use super::CodeGen;
-use crate::ast_lowering::{APriType, AType, AVal, MIR, AVar, ConstVal};
+use crate::ast_lowering::{APriType, AType, AVal, MIR, AVar, ConstVal, MIRTy};
 use crate::parser::SyntaxType as ST;
 
 
@@ -13,11 +13,18 @@ use crate::parser::SyntaxType as ST;
 
 impl<'ctx> CodeGen<'ctx> {
     fn translate_mir(&mut self, mir: MIR) {
-        let MIR { name, ty, val } = mir;
+        let MIR { name, tagid, mirty, ty, val } = mir;
 
         let bv = self.translate_avar(AVar { ty, val });
 
-        self.bind_bv(name, bv);
+        match mirty {
+            MIRTy::ValBind => {
+                self.bind_val(name, bv);
+            },
+            MIRTy::VarAssign => {
+                self.assign_var((name, tagid.unwrap()), bv)
+            },
+        }
     }
 
     fn translate_avar(&mut self, var: AVar) -> BasicValueEnum<'ctx> {
@@ -37,10 +44,20 @@ impl<'ctx> CodeGen<'ctx> {
             AVal::Break => self.translate_break(),
             AVal::Continue => self.translate_continue(),
             AVal::Return(sym_opt) => self.translate_return(sym_opt),
-            AVal::InfiLoopExpr(blk_idx) => self.translate_infi_loop(blk_idx),
+            AVal::InfiLoopExpr(blk_idx) => {
+                let res = self.translate_infi_loop(blk_idx);
+                self.break_to = None;
+                res
+            },
             AVal::TypeCast { name, ty } => self.translate_type_cast(name, ty),
+            AVal::Var(sym, tagid) => self.translate_var(sym, tagid),
             _ => unreachable!("{:#?}", var),
         }
+    }
+
+    fn translate_var(&self, sym: Symbol, tagid: usize) -> BasicValueEnum<'ctx> {
+        let ptr = self.fn_alloc.get(&(sym, tagid)).unwrap();
+        self.builder.build_load(*ptr, "")
     }
 
     fn translate_bop_expr(
@@ -50,8 +67,8 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> BasicValueEnum<'ctx> {
         debug_assert_eq!(operands.len(), 2);
 
-        let ope1st = self.find_sym(&operands[0]).unwrap();
-        let ope2nd = self.find_sym(&operands[1]).unwrap();
+        let ope1st = self.find_sym(operands[0]).unwrap();
+        let ope2nd = self.find_sym(operands[1]).unwrap();
 
         match op {
             ST::add => {
@@ -152,7 +169,7 @@ impl<'ctx> CodeGen<'ctx> {
         name: Symbol,
         ty: AType,
     ) -> BasicValueEnum<'ctx> {
-        let bv = self.find_sym(&name).unwrap();
+        let bv = self.find_sym(name).unwrap();
 
         if bv.is_int_value() {
             match ty {
@@ -202,22 +219,32 @@ impl<'ctx> CodeGen<'ctx> {
         match const_val {
             ConstVal::Int(val) => self.vmmod.i32(val).into(),
             ConstVal::Float(val) => self.vmmod.f64(val).into(),
-            ConstVal::Str(val) => self.vmmod.str(&sym2str(val)).into(),
+            ConstVal::Str(val) => {
+                let ptr = self.vmmod.build_local_str(&self.builder, &sym2str(val)).0;
+                ptr.into()
+            },
             ConstVal::Bool(val) => self.vmmod.bool(val).into(),
         }
 
     }
 
     fn translate_return(
-        &self,
+        &mut self,
         sym_opt: Option<Symbol>,
     ) -> BasicValueEnum<'ctx> {
-        if let Some(ref sym) = sym_opt {
+        if let Some(sym) = sym_opt {
             let bv = self.find_sym(sym).unwrap();
-            self.builder.build_return(Some(&bv));
+            let cur_bb = self.builder.get_insert_block().unwrap();
+
+            self.phi_ret.push((bv, cur_bb));
         } else {
-            self.builder.build_return(None);
+            // Do nothing
         }
+
+        let blk_last = self.get_fnval().unwrap().get_last_basic_block().unwrap();
+        self.builder.build_unconditional_branch(blk_last);
+
+        self.has_ret = true;
 
         VMMod::null()
     }
@@ -229,9 +256,13 @@ impl<'ctx> CodeGen<'ctx> {
         VMMod::null()
     }
 
-    fn translate_break(&self) -> BasicValueEnum<'ctx> {
+    fn translate_break(&mut self) -> BasicValueEnum<'ctx> {
+        if self.break_to.is_none() {
+            self.break_to = Some(self.insert_nonterminal_bb());
+        }
+
         let bb_nxt = self.break_to.unwrap();
-        self.builder.build_unconditional_branch(bb_nxt);
+        self.link_bb(bb_nxt);
 
         VMMod::null()
     }
@@ -243,14 +274,11 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> BasicValueEnum<'ctx> {
         let bv_args = args
             .into_iter()
-            .map(|sym| if let Some(bv) = self.find_sym(&sym) {
-                bv.into()
-            } else {
-                dbg!(self.cur_blk());
-
-                unreachable!("call {:?}, arg: {:?}", call_fn, sym)
-            }
-        )
+            .map(|sym| if let Some(bv) = self.find_sym(sym) {
+                    bv.into()
+                } else {
+                    unreachable!("call {:?}, arg: {:?}", call_fn, sym)
+                })
             .collect_vec();
 
         let fnval_call =
@@ -282,6 +310,8 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> BasicValueEnum<'ctx> {
         self.sc.push(blk_idx);
 
+        self.has_ret = false;
+
         let mirs = self.amod.scopes[blk_idx].mirs.clone();
         let retopt = self.amod.scopes[blk_idx].ret.clone();
 
@@ -306,20 +336,21 @@ impl<'ctx> CodeGen<'ctx> {
         else_blk: Option<usize>,
     ) -> BasicValueEnum<'ctx> {
         let if_br_len = if_exprs.len();
-        let bmt = self.gen_aty_as_basic_meta_type(&ty);
-        let phi_ret = self.builder.build_phi(
-            bmt,
-            ""
-        );
-
         let bbs = (0..if_br_len * 2)
-            .map(|_| self.append_bb())
+            .map(|_| self.insert_nonterminal_bb())
             .collect_vec();
 
-        let bb_nxt = if else_blk.is_some() { self.append_bb() } else { bbs[if_br_len * 2 - 1] };
+        let mut phi_local = vec![];
+
+        let bb_nxt = if else_blk.is_some() {
+                self.insert_nonterminal_bb()
+            }
+            else {
+                bbs[if_br_len * 2 - 1]
+            };
 
         for (i, (cond_sym, blk_idx)) in if_exprs.into_iter().enumerate() {
-            let cond_bv = self.find_sym(&cond_sym).unwrap();
+            let cond_bv = self.find_sym(cond_sym).unwrap();
             let bb_if = bbs[i * 2];
             let bb_else = bbs[i * 2 + 1];
 
@@ -332,16 +363,22 @@ impl<'ctx> CodeGen<'ctx> {
             // build if
             self.builder.position_at_end(bb_if);
             let bv_if = self.translate_block(blk_idx);
-            self.builder.build_unconditional_branch(bb_nxt);
-            phi_ret.add_incoming(&[(&bv_if, bb_if)]);
+
+            if !self.has_ret {
+                self.builder.build_unconditional_branch(bb_nxt);
+                phi_local.push((bv_if, bb_if));
+            }
 
             // build else
             self.builder.position_at_end(bb_else);
             if i == if_br_len - 1 {
                 if let Some(else_idx) = else_blk {
                     let bv_else = self.translate_block(else_idx);
-                    self.builder.build_unconditional_branch(bb_nxt);
-                    phi_ret.add_incoming(&[(&bv_else, bb_else)]);
+
+                    if !self.has_ret {
+                        self.builder.build_unconditional_branch(bb_nxt);
+                        phi_local.push((bv_else, bb_else));
+                    }
                 }
                 else {
                     debug_assert_eq!(bb_else, bb_nxt);
@@ -352,21 +389,34 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.builder.position_at_end(bb_nxt);
 
-        phi_ret.as_basic_value()
+        if matches!(ty, AType::Void) {
+            VMMod::null()
+        }
+        else {
+            let bmt = self.gen_aty_as_basic_meta_type(&ty);
+            let phi_ret = self.builder.build_phi(
+                bmt,
+                ""
+            );
+            for (bv, bb) in phi_local.into_iter() {
+                phi_ret.add_incoming(&[(&bv, bb)]);
+            }
+
+            phi_ret.as_basic_value()
+        }
+
     }
 
     fn translate_infi_loop(&mut self, blk_idx: usize) -> BasicValueEnum<'ctx> {
         /* Setup loop config */
-        let bb_loop = self.append_bb();
-        let bb_succr = self.append_bb();
+        let bb_loop = self.insert_nonterminal_bb();
         self.continue_to = Some(bb_loop);
-        self.break_to = Some(bb_succr);
 
         self.link_bb(bb_loop);
 
         let bv = self.translate_block(blk_idx);
 
-        self.builder.position_at_end(bb_succr);
+        self.builder.build_unconditional_branch(bb_loop);
 
         bv
     }

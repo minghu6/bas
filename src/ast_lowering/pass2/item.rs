@@ -1,14 +1,12 @@
-use m6lexerkit::{sym2str, str2sym};
-
-use crate::ast_lowering::{ MIR, AVal, AVar, AType };
-use crate::parser::{SyntaxType as ST, TokenTree};
+use m6lexerkit::sym2str;
 
 use super::SemanticAnalyzerPass2;
+use crate::ast_lowering::{AType, AVal, AVar, MIR};
+use crate::parser::{SyntaxType as ST, TokenTree};
 
 
 
 impl SemanticAnalyzerPass2 {
-
     pub(crate) fn do_analyze_item(&mut self, tt: &TokenTree) {
         for (ty, sn) in tt.subs.iter() {
             if *ty == ST::Function {
@@ -30,6 +28,10 @@ impl SemanticAnalyzerPass2 {
 
         // There must be definition by Pass1
 
+        // Set current fn name
+
+        self.cur_fn = Some(fn_name);
+
         // Unpack Param
 
         let scope_idx = self.push_new_scope();
@@ -42,18 +44,30 @@ impl SemanticAnalyzerPass2 {
         };
 
         for (i, param_pat) in afn.params.iter().enumerate() {
-            scope.mirs.push(MIR {
-                name: param_pat.formal,
-                ty: param_pat.ty.clone(),
-                val: AVal::FnParam(i as u32),
-            })
+            scope.mirs.push(MIR::bind_value(
+                param_pat.formal,
+                AVar {
+                    ty: param_pat.ty.clone(),
+                    val: AVal::FnParam(i as u32),
+                },
+            ))
         }
 
-        self.do_analyze_block_with_scope(scope_idx, sn.as_tt());
+        self.do_analyze_block_with_scope(scope_idx, sn.as_tt().subs[0].1.as_tt());
 
-        let val = AVal::DefFn { name: fn_name, scope_idx };
-        self.bind_var(str2sym(""), AVar { ty: AType::Void, val });
+        let val = AVal::DefFn {
+            name: fn_name,
+            scope_idx,
+        };
+        self.bind_value(
+            AVar {
+                ty: AType::Void,
+                val,
+            },
+        );
+
+        // Unset current fn name
+        self.cur_fn = None;
 
     }
-
 }

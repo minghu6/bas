@@ -3,6 +3,7 @@
 #define LIB_H
 
 #include <stdint.h>
+#include "./vec.h"
 
 char* stringify_i32(int32_t src);
 char* stringify_f64(double src);

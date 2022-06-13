@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef struct Vec *Vec;
 typedef int32_t i32;
@@ -14,7 +15,7 @@ typedef void *ptr;
   Vec vec_new_##type(size_t cap);
 
 #define declare_vec_push(type) \
-  size_t vec_push_##type(Vec v, type val);
+  int vec_push_##type(Vec v, type val);
 
 #define declare_vec_get(type) \
   type vec_get_##type(Vec v, size_t idx);

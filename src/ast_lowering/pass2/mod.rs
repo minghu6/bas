@@ -3,11 +3,13 @@ use std::rc::Rc;
 use m6coll::Entry;
 use m6lexerkit::{str2sym, Symbol, Token};
 
+use indexmap::indexmap;
+
 use super::{
     aty_int, aty_opaque_struct, aty_str, AMod, APriType, AScope, AType, AVal,
     AVar, AnalyzeResult2, ConstVal, DiagnosisItem2, DiagnosisType as R, MIR, ASymDef,
 };
-use crate::parser::{SyntaxType as ST, TokenTree};
+use crate::{parser::{SyntaxType as ST, TokenTree}, codegen::is_implicit_sym};
 
 mod expr;
 mod item;
@@ -23,17 +25,23 @@ mod ty;
 ///
 pub(crate) struct SemanticAnalyzerPass2 {
     amod: AMod,
-    sc: Vec<usize>,  // Scope Counter
+    sc: Vec<usize>,  // Scope Counter,
+    cur_fn: Option<Symbol>,
     tt: Rc<TokenTree>,
     diagnosis: Vec<DiagnosisItem2>,
 }
 
 
 impl SemanticAnalyzerPass2 {
-    pub(crate) fn new(amod: AMod, tt: Rc<TokenTree>) -> Self {
+    pub(crate) fn new(mut amod: AMod, tt: Rc<TokenTree>) -> Self {
+        for (sym, _afndec) in amod.afns.iter() {
+            amod.allocs.insert(*sym, indexmap! {});
+        }
+
         Self {
             amod,
-            sc: vec![0],
+            sc: vec![0],  // 0 is root
+            cur_fn: None,
             tt,
             diagnosis: vec![],
         }
@@ -88,7 +96,7 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn find_explicit_sym(&self, sym: &Symbol) -> Option<AVar> {
+    pub(crate) fn find_explicit_sym_ty_and_tag(&self, sym: &Symbol) -> Option<(usize, AType)> {
         let mut scope = self.cur_scope();
 
         loop {
@@ -107,8 +115,8 @@ impl SemanticAnalyzerPass2 {
         sym: Symbol,
         idt: Token,
     ) -> AVar {
-        if let Some(avar) = self.find_explicit_sym(&sym) {
-            avar
+        if let Some((tagid, ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
+            AVar { ty, val: AVal::Var(sym, tagid) }
         } else {
             println!("{:#?}", self.frame_stack());
 
@@ -138,12 +146,12 @@ impl SemanticAnalyzerPass2 {
 
             if ty1 != ty {
                 let val = AVal::TypeCast { name: sym1, ty: ty.clone() };
-                let res_sym1 = self.name_var(AVar { ty: ty.clone(), val });
+                let res_sym1 = self.bind_value(AVar { ty: ty.clone(), val });
                 res_sym_def1 = ASymDef { name: res_sym1, ty  };
 
             } else if ty2 != ty {
                 let val = AVal::TypeCast { name: sym2, ty: ty.clone() };
-                let res_sym2 = self.name_var(AVar { ty: ty.clone(), val });
+                let res_sym2 = self.bind_value(AVar { ty: ty.clone(), val });
                 res_sym_def2 = ASymDef { name: res_sym2, ty  };
             }
 
@@ -161,24 +169,48 @@ impl SemanticAnalyzerPass2 {
     }
 
     /// For Implicit Symbol
-    pub(crate) fn name_var(&mut self, var: AVar) -> Symbol {
+    pub(crate) fn bind_value(&mut self, var: AVar) -> Symbol {
         let scope = self.cur_scope_mut();
 
         let tmp = scope.tmp_name();
-        scope.mirs.push(MIR::bind(tmp, var));
+        scope.mirs.push(MIR::bind_value(tmp, var));
         scope.implicit_bindings.insert(tmp, scope.mirs.len() - 1);
 
         tmp
     }
 
     /// For Explicit Symbol
-    pub(crate) fn bind_var(&mut self, sym: Symbol, var: AVar) -> Symbol {
+    pub(crate) fn assign_var(&mut self, sym: Symbol, var: AVar) -> Symbol {
+        let (tagid, _ty) = self.find_explicit_sym_ty_and_tag(&sym).unwrap();
+
         let scope = self.cur_scope_mut();
 
-        scope.mirs.push(MIR::bind(sym, var));
-        scope.explicit_bindings.push(Entry(sym, scope.mirs.len() - 1));
+        // TODO: check type consistency
+
+        scope.mirs.push(MIR::assign_var(sym, tagid, var.clone()));
 
         sym
+    }
+
+    pub(crate) fn create_var(&mut self, sym: Symbol, ty: AType) {
+        let fn_alloc
+            = self.amod.allocs.get_mut(&self.cur_fn.unwrap()).unwrap();
+
+        // get last tagid
+        let mut tagid = 0;
+        for (scan_sym, scan_tagid) in fn_alloc.keys().rev() {
+            if sym == *scan_sym {
+                tagid = scan_tagid + 1;
+                break;
+            }
+        }
+
+        fn_alloc.insert((sym, tagid), ty.clone());
+
+        let scope = self.cur_scope_mut();
+
+        scope.explicit_bindings.push(Entry(sym, (tagid, ty)));
+
     }
 
     pub(crate) fn build_strinify_var(
@@ -188,7 +220,7 @@ impl SemanticAnalyzerPass2 {
     ) -> Symbol {
         match var.ty {
             AType::Pri(prity) => {
-                let sym = self.name_var(var);
+                let sym = self.bind_value(var);
                 let arg0 = sym;
 
                 let val = match prity {
@@ -207,7 +239,7 @@ impl SemanticAnalyzerPass2 {
                     _ => todo!(),
                 };
 
-                self.name_var(AVar { ty: aty_str(), val })
+                self.bind_value(AVar { ty: aty_str(), val })
             }
             AType::PH => str2sym(""),
             _ => {
@@ -224,20 +256,20 @@ impl SemanticAnalyzerPass2 {
         let val = AVal::ConstAlias(ConstVal::Str(sym));
         let ty = aty_str();
 
-        self.name_var(AVar { ty, val })
+        self.bind_value(AVar { ty, val })
     }
 
-    pub(super) fn build_const_int(&mut self, val: i32) -> Symbol {
+    pub(super) fn build_const_usize(&mut self, val: i32) -> Symbol {
         let val = AVal::ConstAlias(ConstVal::Int(val));
-        let ty = aty_int(-4);
+        let ty = aty_int(4);
 
-        self.name_var(AVar { ty, val })
+        self.bind_value(AVar { ty, val })
     }
 
     pub(super) fn build_const_vec_str(&mut self, strs: Vec<Symbol>) -> Symbol {
         /* Create Vec */
-        let cap = self.build_const_int(strs.len().try_into().unwrap());
-        let sym_vec = self.name_var(AVar {
+        let cap = self.build_const_usize(strs.len().try_into().unwrap());
+        let sym_vec = self.bind_value(AVar {
             ty: aty_opaque_struct("Vec"),
             val: AVal::FnCall {
                 call_fn: str2sym("vec_new_ptr"),
@@ -246,12 +278,19 @@ impl SemanticAnalyzerPass2 {
         });
 
         for s in strs.into_iter() {
-            let sym_s = self.build_const_str(s);
-            self.name_var(AVar {
+            let sym_str = if is_implicit_sym(s) {
+                s
+            }
+            else {
+                let (tagid, ty) = self.find_explicit_sym_ty_and_tag(&s).unwrap();
+                self.bind_value(AVar { ty, val: AVal::Var(s, tagid) })
+            };
+
+            self.bind_value(AVar {
                 ty: aty_int(-4),
                 val: AVal::FnCall {
                     call_fn: str2sym("vec_push_ptr"),
-                    args: vec![sym_vec, sym_s],
+                    args: vec![sym_vec, sym_str],
                 },
             });
         }

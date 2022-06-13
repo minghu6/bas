@@ -7,7 +7,7 @@ fn main() -> int {
 #   let tmp = 2 + 3  * 4 - 2;
 
     loop {
-        if count < 40 {
+        if count < 10 {
             count++;
             !(sleep 1);
             !(tput rc);

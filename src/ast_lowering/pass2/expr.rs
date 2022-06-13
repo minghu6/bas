@@ -6,7 +6,7 @@ use super::SemanticAnalyzerPass2;
 use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef};
 use crate::{
     ast_lowering::{
-        APriType, AType, AVal, AVar, ConstVal, DiagnosisType as R, MIR,
+        APriType, AType, AVal, AVar, ConstVal, DiagnosisType as R,
     },
     parser::{SyntaxType as ST, TokenTree},
 };
@@ -18,12 +18,18 @@ impl SemanticAnalyzerPass2 {
         let mut sns = tt.subs.iter().peekable();
 
         if sns.peek().unwrap().0 == ST::OpExpr {
-            let var1 = self.analyze_expr(sns.next().unwrap().1.as_tt());
-            let sym1 = self.name_var(var1.clone());
-            let symdef1 = ASymDef::new(sym1, var1.ty.clone());
-
+            let tt1 = sns.next().unwrap().1.as_tt();
             let (bopty, bopsn) = sns.next().unwrap();
             let bop_tok = bopsn.as_tok();
+            let tt2 = sns.next().unwrap().1.as_tt();
+
+            // println!("tt1: {:?}", tt1);
+            // println!("bop: {:?}", bop_tok);
+            // println!("tt2: {:?}", tt2);
+
+            let var1 = self.analyze_expr(tt1);
+            let sym1 = self.bind_value(var1.clone());
+            let symdef1 = ASymDef::new(sym1, var1.ty.clone());
 
             /* TODO: Short Circuit Evaluation */
             if *bopty == ST::and {
@@ -34,26 +40,25 @@ impl SemanticAnalyzerPass2 {
                 // if var1.val ne 0 { 1 } else { analyze_var2 }
             }
 
-            let var2 = self.analyze_expr(sns.next().unwrap().1.as_tt());
-            let sym2 = self.name_var(var2.clone());
+            let var2 = self.analyze_expr(tt2);
+            let sym2 = self.bind_value(var2.clone());
             let symdef2 = ASymDef::new(sym2, var2.ty.clone());
 
-            let (res_symdef1, _res_symdef2) = self.lift_tys_or_diagnose(
-                *bopty,
-                symdef1,
-                symdef2,
-                *bop_tok,
-            );
+            let (res_symdef1, res_symdef2) =
+                self.lift_tys_or_diagnose(*bopty, symdef1, symdef2, *bop_tok);
 
-            let var1_sym = self.name_var(var1);
-            let var2_sym = self.name_var(var2);
+            let var1_sym = res_symdef1.name;
+            let var2_sym = res_symdef2.name;
 
             let retval = AVal::BOpExpr {
                 op: bopty.clone(),
                 operands: vec![var1_sym, var2_sym],
             };
 
-            return AVar { ty: res_symdef1.ty.clone(), val: retval };
+            return AVar {
+                ty: res_symdef1.ty.clone(),
+                val: retval,
+            };
         }
 
         // Atom Expr
@@ -193,18 +198,20 @@ impl SemanticAnalyzerPass2 {
         }
 
         let op = if op == ST::inc { ST::add } else { ST::sub };
-        let id = idt.value;
-        let var = self.find_explicit_sym_or_diagnose(id, idt);
+        let var_id = idt.value;
+        let var = self.find_explicit_sym_or_diagnose(var_id, idt);
+        let var_ty = var.ty.clone();
+        let id = self.bind_value(var.clone());
 
         let const_ty = aty_i32();
-        let const_id = self.name_var(AVar {
+        let const_id = self.bind_value(AVar {
             ty: const_ty.clone(),
             val: AVal::ConstAlias(ConstVal::Int(1)),
         });
 
         let (symdef1, symdef2) = self.lift_tys_or_diagnose(
             op,
-            ASymDef::new(id, var.ty.clone()),
+            ASymDef::new(id, var_ty),
             ASymDef {
                 name: const_id,
                 ty: const_ty,
@@ -216,8 +223,11 @@ impl SemanticAnalyzerPass2 {
             op,
             operands: vec![symdef1.name, symdef2.name],
         };
-        let nxt_var = AVar { ty: symdef1.ty.clone(), val };
-        self.name_var(nxt_var.clone());
+        let nxt_var = AVar {
+            ty: symdef1.ty.clone(),
+            val,
+        };
+        self.assign_var(var_id, nxt_var.clone());
 
         if fst_get {
             var
@@ -232,7 +242,7 @@ impl SemanticAnalyzerPass2 {
         let val;
         if let Some((_st, sn)) = sns.next() {
             let retvar = self.analyze_expr(sn.as_tt());
-            val = AVal::Return(Some(self.name_var(retvar)));
+            val = AVal::Return(Some(self.bind_value(retvar)));
         } else {
             val = AVal::Return(None);
         }
@@ -252,20 +262,19 @@ impl SemanticAnalyzerPass2 {
 
         // extract symbol from tokv
         let syms = extract_symbol(&tokv);
+        let mut sym_syms = Vec::with_capacity(syms.len());
         let mut string_syms = Vec::with_capacity(syms.len());
 
         // stringlize symbol
         for sym in syms.iter() {
-            if let Some(var) = self.find_explicit_sym(sym) {
-                string_syms.push(self.build_strinify_var(var, idt));
-            } else {
-                self.write_dialogsis(R::UnknownSymbolBinding(*sym), idt);
-            }
+            let var = self.find_explicit_sym_or_diagnose(*sym, idt);
+            string_syms.push(self.build_strinify_var(var, idt));
+            sym_syms.push(self.build_const_str(*sym));
         }
 
         // string replace
         let arg0 = self.build_const_str(sn.as_tok().value);
-        let arg1 = self.build_const_vec_str(syms);
+        let arg1 = self.build_const_vec_str(sym_syms);
         let arg2 = self.build_const_vec_str(string_syms);
 
         let val = AVal::FnCall {
@@ -273,11 +282,20 @@ impl SemanticAnalyzerPass2 {
             args: vec![arg0, arg1, arg2],
         };
 
-        let cmd_sym = self.name_var(AVar { ty: aty_str(), val });
+        let cmd_sym = self.bind_value(AVar { ty: aty_str(), val });
 
         let val = AVal::FnCall {
             call_fn: str2sym("exec"),
             args: vec![cmd_sym],
+        };
+
+        // print stdout
+        let ctlstr = self.build_const_str(str2sym("%s\n"));
+        let exec_res = self.bind_value(AVar { ty: aty_str(), val });
+
+        let val = AVal::FnCall {
+            call_fn: str2sym("printf"),
+            args: vec![ctlstr, exec_res],
         };
 
         AVar { ty: aty_str(), val }
@@ -292,7 +310,9 @@ impl SemanticAnalyzerPass2 {
 
         while !sns.is_empty() {
             let cond_var = self.analyze_expr(sns.next().unwrap().1.as_tt());
-            let cond_sym = self.name_var(cond_var);
+            let cond_sym = self.bind_value(cond_var);
+
+            // dbg!(sns.peek().unwrap());
 
             let if_expr_var =
                 self.analyze_block_expr(sns.next().unwrap().1.as_tt());
@@ -351,7 +371,7 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn analyze_infi_loop_expr(&mut self, tt: &TokenTree) -> AVar {
-        let var = self.analyze_block_expr(tt);
+        let var = self.analyze_block_expr(tt.subs[0].1.as_tt());
 
         let val = AVal::InfiLoopExpr(var.val.as_block_expr_idx());
 
@@ -362,11 +382,17 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn analyze_break_expr(&mut self, _tt: &TokenTree) -> AVar {
-        AVar { ty: AType::Void, val: AVal::Break }
+        AVar {
+            ty: AType::Void,
+            val: AVal::Break,
+        }
     }
 
     pub(crate) fn analyze_continue_expr(&mut self, _tt: &TokenTree) -> AVar {
-        AVar { ty: AType::Void, val: AVal::Continue }
+        AVar {
+            ty: AType::Void,
+            val: AVal::Continue,
+        }
     }
 
     pub(crate) fn do_analyze_block_with_scope(
@@ -376,7 +402,9 @@ impl SemanticAnalyzerPass2 {
     ) {
         self.sc.push(scope_idx);
 
-        for (ty, sn) in tt.subs[0].1.as_tt().subs.iter() {
+        // dbg!(&tt);
+
+        for (ty, sn) in tt.subs.iter() {
             if *ty == ST::Stmt {
                 self.do_analyze_stmt(sn.as_tt());
             } else if *ty == ST::Expr {
@@ -396,7 +424,7 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn do_analyze_expr(&mut self, tt: &TokenTree) {
         let avar = self.analyze_expr(tt);
 
-        self.cur_scope_mut().mirs.push(MIR::side_effect(avar.val))
+        self.bind_value(avar);
     }
 }
 

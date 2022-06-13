@@ -8,13 +8,6 @@ copybin: build
 
 getbasc: build copybin
 
-genlib:
-	@ cargo build -p rsc --release
-	@ cp ./target/release/librsc.so ./runtime/
-	@ cargo build -p mixin --release
-	@ cp ./target/release/libmixin.a ./lib/
-	@ cp ./target/release/libmixin.so ./lib/
-
 testexp0: getbasc
 	@ ./${BARE_COMPILER} ./examples/exp0.bath
 
@@ -29,6 +22,12 @@ testanalyze:
 
 testcodegen:
 	cargo test -- --nocapture test_codegen
+
+testcompile:
+	cargo test -- --nocapture test_compile
+
+getlib:
+	@ cd clib && make libbas.a && mv libbas.a ../
 
 dump:
 	@ objdump -xsd ./output.o

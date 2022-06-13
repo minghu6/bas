@@ -2,6 +2,7 @@ mod pass1;
 mod pass2;
 
 use std::cmp::{max, min};
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use indexmap::{indexmap, IndexMap};
@@ -142,7 +143,8 @@ impl AType {
 }
 
 pub(crate) struct AFnDec {
-    idt: Token, // Identifier Token
+    idt: Token,  // Identifier Token
+    // body_idx: Option<usize>,
     pub(crate) name: Symbol,
     pub(crate) params: Vec<AParamPat>,
     pub(crate) ret: AType,
@@ -160,18 +162,45 @@ impl std::fmt::Debug for AFnDec {
 
 impl AFnDec {}
 
-#[derive(Debug)]
+pub(crate) type AFnAlloc = IndexMap<(Symbol, usize), AType>;
+
 pub(crate) struct AMod {
     pub(crate) name: Symbol,
     pub(crate) afns: IndexMap<Symbol, AFnDec>,
+    pub(crate) allocs: IndexMap<Symbol, AFnAlloc>,
     pub(crate) scopes: Vec<AScope>, // Start from Root Scope
 }
+
+impl Debug for AMod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct AScopeVec<'a>(&'a Vec<AScope>);
+        impl<'a> std::fmt::Debug for AScopeVec<'a> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                for (i, ascope) in self.0.iter().enumerate() {
+                    writeln!(f, "{} {} {}", "-".repeat(35), i, "-".repeat(35))?;
+                    writeln!(f, "{:#?}", ascope)?;
+                }
+
+                Ok(())
+            }
+        }
+
+        f.debug_struct("AMod")
+        .field("name", &self.name)
+        .field("afns", &self.afns)
+        .field("allocs", &self.allocs)
+        .field("scopes", &AScopeVec(&self.scopes))
+        .finish()
+    }
+}
+
 
 impl AMod {
     fn init(name: Symbol) -> Self {
         Self {
             name,
             afns: indexmap! {},
+            allocs: indexmap! {},
             scopes: vec![AScope::default()], // push Root Scope
         }
     }
@@ -261,6 +290,7 @@ pub(crate) enum AVal {
         ty: AType
     },
     ConstAlias(ConstVal),
+    Var(Symbol, usize),  // symname, tagid
     Break,
     Continue,
     Return(Option<Symbol>),
@@ -280,8 +310,16 @@ impl AVal {
 pub(crate) struct MIR {
     // SSA
     pub(crate) name: Symbol,
+    pub(crate) tagid: Option<usize>,
+    pub(crate) mirty: MIRTy,
     pub(crate) ty: AType,
     pub(crate) val: AVal,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum MIRTy {
+    ValBind,
+    VarAssign
 }
 
 impl MIR {
@@ -293,34 +331,50 @@ impl MIR {
     //     }
     // }
 
-    fn side_effect(val: AVal) -> Self {
-        Self {
-            name: str2sym(""),
-            ty: AType::Void,
-            val,
-        }
-    }
+    // fn side_effect(val: AVal) -> Self {
+    //     Self {
+    //         name: str2sym(""),
+    //         tagid: None,
+    //         mirty: MIRTy::ValBind,
+    //         ty: AType::Void,
+    //         val,
+    //     }
+    // }
 
-    fn bind(name: Symbol, var: AVar) -> Self {
+    fn bind_value(name: Symbol, var: AVar) -> Self {
         Self {
             name,
+            tagid: None,
+            mirty: MIRTy::ValBind,
             ty: var.ty,
             val: var.val,
         }
     }
 
-    fn var(&self) -> AVar {
-        AVar {
-            ty: self.ty.clone(),
-            val: self.val.clone(),
+    fn assign_var(name: Symbol, tagid: usize, var: AVar) -> Self {
+        Self {
+            name,
+            tagid: Some(tagid),
+            mirty: MIRTy::VarAssign,
+            ty: var.ty,
+            val: var.val,
         }
     }
+
+    // fn var(&self) -> AVar {
+    //     AVar {
+    //         ty: self.ty.clone(),
+    //         val: self.val.clone(),
+    //     }
+    // }
 }
+
 
 #[derive(Default)]
 pub(crate) struct AScope {
     pub(crate) paren: Option<usize>,
-    pub(crate) explicit_bindings: Vec<Entry<Symbol, usize>>,
+    /// val: tagid, ty
+    pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AType)>>,
     pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
     pub(crate) mirs: Vec<MIR>,
     pub(crate) ret: Option<AVar>
@@ -332,41 +386,42 @@ impl AScope {
     }
 
     pub(crate) fn ret(&self) -> AVar {
-        if self.mirs.is_empty() {
-            AVar::void()
+        if let Some(ret) = self.ret.clone() {
+            ret
         } else {
-            let last_mir = self.mirs.last().unwrap();
-            last_mir.var()
+            AVar::void()
         }
     }
 
-    pub(crate) fn in_scope_find_sym(&self, q: &Symbol) -> Option<AVar> {
+    pub(crate) fn in_scope_find_sym(&self, q: &Symbol) -> Option<(usize, AType)> {
         self.explicit_bindings
             .iter()
             .rev()
             .find(|Entry(sym, _mir_idx)| sym == q)
-            .and_then(|Entry(_sym, mir_idx)| Some(self.mirs[*mir_idx].var()))
+            .and_then(|Entry(_sym, (tagid, ty))| Some((*tagid, ty.clone())))
     }
 }
 
+
 impl std::fmt::Debug for AScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct DVec(Vec<Entry<Symbol, usize>>);
-        impl std::fmt::Debug for DVec {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                for Entry(sym, _idx) in self.0.iter() {
-                    writeln!(f, "{}", sym2str(*sym))?;
-                }
+        // struct DVec(Vec<Entry<Symbol, usize>>);
+        // impl std::fmt::Debug for DVec {
+        //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        //         for Entry(sym, _idx) in self.0.iter() {
+        //             writeln!(f, "{}", sym2str(*sym))?;
+        //         }
 
-                Ok(())
-            }
-        }
+        //         Ok(())
+        //     }
+        // }
 
         f.debug_struct("AScope")
             .field("paren", &self.paren)
-            .field("explicit_bindings", &DVec(self.explicit_bindings.clone()))
+            .field("explicit_bindings", &self.explicit_bindings)
             .field("implicit_bindings", &self.implicit_bindings)
             .field("mirs", &self.mirs)
+            .field("ret", &self.ret)
             .finish()
     }
 }
@@ -545,8 +600,6 @@ mod tests {
     fn test_analyze() -> Result<(), Box<dyn std::error::Error>> {
         let path = PathBuf::from("./examples/exp0.bath");
         let src = SrcFileInfo::new(&path).unwrap();
-
-        // println!("{:#?}", sp_m(srcfile.get_srcstr(), SrcLoc { ln: 0, col: 0 }));
 
         let tokens = tokenize(&src)?;
         let tt = parse(tokens, &src)?;

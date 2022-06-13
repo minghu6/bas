@@ -2,7 +2,7 @@
 
 #define CSTR_H
 
-#include <stdint.h>
+#include <stdlib.h>
 #include "vec.h"
 
 typedef Vec CStr;
