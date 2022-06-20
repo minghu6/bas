@@ -119,7 +119,7 @@ fn display_pure_tokval(tokens: &[Token], src: &SrcFileInfo) {
             "<{}>: {}: {}",
             token.name_string(),
             token.value_string(),
-            src.boffset2srcloc(token.span.from)
+            src.boffset2srcloc(token.span().from)
         )
     }
 }

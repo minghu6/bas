@@ -3,7 +3,9 @@ fn main() -> int {
     !(echo -n Count :);
     !(tput sc);
 
-    let count = 0;
+    let count: int;
+
+    count = 4;
 #   let tmp = 2 + 3  * 4 - 2;
 
     loop {

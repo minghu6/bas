@@ -1,5 +1,5 @@
 use m6lexerkit::lazy_static::lazy_static;
-use m6lexerkit::{str2sym, sym2str, Symbol};
+use m6lexerkit::{str2sym0, sym2str, Symbol};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
@@ -21,11 +21,35 @@ impl SemanticAnalyzerPass2 {
             let tt1 = sns.next().unwrap().1.as_tt();
             let (bopty, bopsn) = sns.next().unwrap();
             let bop_tok = bopsn.as_tok();
+            let span = bop_tok.span();
             let tt2 = sns.next().unwrap().1.as_tt();
 
-            // println!("tt1: {:?}", tt1);
-            // println!("bop: {:?}", bop_tok);
-            // println!("tt2: {:?}", tt2);
+            /* EXCLUDE ASSIGN CASE */
+            if *bopty == ST::assign {
+                // println!("tt1: {:#?}", tt.subs[0]);
+                let var = self.analyze_path_expr(tt1.subs[0].1.as_tt());
+
+                let value = self.analyze_expr(tt2);
+
+                let valty = value.ty.clone();
+                let mut valsym = self.bind_value(value);
+
+                if var.ty != valty {
+                    if let Ok(_) = valty.try_cast(&var.ty) {
+                        valsym = self.cast_val(valsym, var.ty);
+                    }
+                    else {
+                        self.write_dialogsis(R::CantCastType(valty.clone(), var.ty), span);
+                    }
+                }
+
+                let (name, tagid) = var.val.as_var();
+
+                return AVar {
+                    ty: valty,
+                    val: AVal::Assign(name, tagid, valsym)
+                }
+            }
 
             let var1 = self.analyze_expr(tt1);
             let sym1 = self.bind_value(var1.clone());
@@ -34,10 +58,42 @@ impl SemanticAnalyzerPass2 {
             /* TODO: Short Circuit Evaluation */
             if *bopty == ST::and {
                 // if var1.val eq 0 { 0 } else { analyze_var2 }
+                // if var1.val { 0 } else { analyze_var2 }
+
+                let ifblk_idx = self.push_single_value_scope(AVar {
+                    ty: aty_bool(),
+                    val: AVal::ConstAlias(ConstVal::Bool(false)),
+                });
+
+                let var2 = self.analyze_expr(tt2);
+                let elseblk_idx = self.push_single_value_scope(var2);
+
+                let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+
+                return AVar {
+                    ty: aty_bool(),
+                    val: ifblk,
+                };
             }
 
             if *bopty == ST::or {
                 // if var1.val ne 0 { 1 } else { analyze_var2 }
+                // or if var1.val { analyze_var2 } else { 1 }
+
+                let var2 = self.analyze_expr(tt2);
+                let ifblk_idx = self.push_single_value_scope(var2);
+
+                let elseblk_idx = self.push_single_value_scope(AVar {
+                    ty: aty_bool(),
+                    val: AVal::ConstAlias(ConstVal::Bool(true)),
+                });
+
+                let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+
+                return AVar {
+                    ty: aty_bool(),
+                    val: ifblk,
+                };
             }
 
             let var2 = self.analyze_expr(tt2);
@@ -45,7 +101,7 @@ impl SemanticAnalyzerPass2 {
             let symdef2 = ASymDef::new(sym2, var2.ty.clone());
 
             let (res_symdef1, res_symdef2) =
-                self.lift_tys_or_diagnose(*bopty, symdef1, symdef2, *bop_tok);
+                self.lift_tys_or_diagnose(*bopty, symdef1, symdef2, span);
 
             let var1_sym = res_symdef1.name;
             let var2_sym = res_symdef2.name;
@@ -161,7 +217,6 @@ impl SemanticAnalyzerPass2 {
         AVar { ty, val }
     }
 
-
     // pub(crate) fn analyze_path_seg(&mut self, tt: &TokenTree) -> Symbol {
     //     tt.subs[0].1.as_tok().value
     // }
@@ -170,10 +225,12 @@ impl SemanticAnalyzerPass2 {
         let mut sns = tt.subs.iter().peekable();
 
         let tt = sns.next().unwrap().1.as_tt();
-        let idt = *tt.subs[0].1.as_tok(); // get path_seg
-        let sym_id = idt.value;
 
-        self.find_explicit_sym_or_diagnose(sym_id, idt)
+        // analyze path_expr_seg
+        let idtok = tt.subs[0].1.as_tok();
+        let id = idtok.value;
+
+        self.find_explicit_sym_or_diagnose(id, id.1)
     }
 
     pub(crate) fn analyze_side_effect_expr(&mut self, tt: &TokenTree) -> AVar {
@@ -199,7 +256,7 @@ impl SemanticAnalyzerPass2 {
 
         let op = if op == ST::inc { ST::add } else { ST::sub };
         let var_id = idt.value;
-        let var = self.find_explicit_sym_or_diagnose(var_id, idt);
+        let var = self.find_explicit_sym_or_diagnose(var_id, idt.span());
         let var_ty = var.ty.clone();
         let id = self.bind_value(var.clone());
 
@@ -216,7 +273,7 @@ impl SemanticAnalyzerPass2 {
                 name: const_id,
                 ty: const_ty,
             },
-            idt,
+            idt.span(),
         );
 
         let val = AVal::BOpExpr {
@@ -258,17 +315,16 @@ impl SemanticAnalyzerPass2 {
 
         let (_st, sn) = sns.next().unwrap();
         let idt = *sn.as_tok();
-        let tokv = sn.as_tok().value_string();
 
         // extract symbol from tokv
-        let syms = extract_symbol(&tokv);
+        let syms = extract_symbol(sn.as_tok().value);
         let mut sym_syms = Vec::with_capacity(syms.len());
         let mut string_syms = Vec::with_capacity(syms.len());
 
         // stringlize symbol
         for sym in syms.iter() {
-            let var = self.find_explicit_sym_or_diagnose(*sym, idt);
-            string_syms.push(self.build_strinify_var(var, idt));
+            let var = self.find_explicit_sym_or_diagnose(*sym, idt.span());
+            string_syms.push(self.build_strinify_var(var, idt.span()));
             sym_syms.push(self.build_const_str(*sym));
         }
 
@@ -278,23 +334,23 @@ impl SemanticAnalyzerPass2 {
         let arg2 = self.build_const_vec_str(string_syms);
 
         let val = AVal::FnCall {
-            call_fn: str2sym("cmd_symbols_replace"),
+            call_fn: str2sym0("cmd_symbols_replace"),
             args: vec![arg0, arg1, arg2],
         };
 
         let cmd_sym = self.bind_value(AVar { ty: aty_str(), val });
 
         let val = AVal::FnCall {
-            call_fn: str2sym("exec"),
+            call_fn: str2sym0("exec"),
             args: vec![cmd_sym],
         };
 
         // print stdout
-        let ctlstr = self.build_const_str(str2sym("%s\n"));
+        let ctlstr = self.build_const_str(str2sym0("%s\n"));
         let exec_res = self.bind_value(AVar { ty: aty_str(), val });
 
         let val = AVal::FnCall {
-            call_fn: str2sym("printf"),
+            call_fn: str2sym0("printf"),
             args: vec![ctlstr, exec_res],
         };
 
@@ -303,7 +359,7 @@ impl SemanticAnalyzerPass2 {
 
     pub(crate) fn analyze_if_expr(&mut self, tt: &TokenTree) -> AVar {
         let mut sns = tt.subs.iter().peekable();
-        let idt = sns.next().unwrap().1.as_tok(); // if idt
+        let span = sns.next().unwrap().1.as_tok().span(); // if idt
 
         let mut if_exprs = vec![];
         let mut else_blk = None;
@@ -348,7 +404,7 @@ impl SemanticAnalyzerPass2 {
                     if1: if_ty.clone(),
                     oths,
                 },
-                *idt,
+                span,
             );
         }
 
@@ -435,18 +491,20 @@ lazy_static! {
 }
 
 ///
+/// Extract value symbol
 /// "echo -n $count" => count
 ///
-fn extract_symbol(tokv: &str) -> Vec<Symbol> {
+fn extract_symbol(value: Symbol) -> Vec<Symbol> {
     let mut syms = vec![];
     // let escape_char = '\\';
     // let cmds = "echo -n $count >> $aa ";
+    let tokv = sym2str(value);
 
-    for one_pat in SYM_PAT.captures_iter(tokv) {
+    for one_pat in SYM_PAT.captures_iter(&tokv) {
         let s = one_pat.get(1).unwrap().as_str();
 
         syms.push(s)
     }
 
-    syms.into_iter().map(|s| str2sym(s)).collect()
+    syms.into_iter().map(|s| value.derive(s) ).collect()
 }

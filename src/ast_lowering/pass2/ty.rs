@@ -7,24 +7,20 @@ use super::SemanticAnalyzerPass2;
 
 impl SemanticAnalyzerPass2 {
 
-    #[allow(unused)]
     pub(crate) fn analyze_ty(&mut self, sn: &SN) -> AType {
-        match sn {
-            SN::T(_) => todo!(),
-            SN::E(tok) => {
-                // analyze alias -- skip (inner multiple scan)
-                if tok.check_value("int") {
-                    return aty_i32();
-                }
-                if tok.check_value("float") {
-                    return aty_f64();
-                }
-                if tok.check_value("str") {
-                    return AType::Pri(APriType::Str);
-                }
+        let tok_id = sn.as_tt().subs[0].1.as_tok();
 
-                todo!("ty: {}", tok);
-            }
+        // analyze alias -- skip (inner multiple scan)
+        if tok_id.check_value("int") {
+            return aty_i32();
         }
+        if tok_id.check_value("float") {
+            return aty_f64();
+        }
+        if tok_id.check_value("str") {
+            return AType::Pri(APriType::Str);
+        }
+
+        todo!("unknown ty: {:?}", tok_id.value);
     }
 }

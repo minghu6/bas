@@ -48,23 +48,11 @@ impl Parser {
         if self.peek1_t().check_name("rarrow") {
             self.unchecked_advance();
 
-            if self.peek1_t().check_name("id") {
-                let ret = box SN::E(self.unchecked_advance());
-                subs.push((ST::ret, ret));
-            } else {
-                return Err(R::Expect {
-                    expect: ST::ret,
-                    four: ST::Function,
-                    found: *self.peek1_t(),
-                });
-            }
+            let ret = box SN::T(self.parse_ty()?);
+            subs.push((ST::ret, ret));
         }
 
         subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));
-
-        // if self.peek1_t().check_name("semi") {
-
-        // }
 
         Ok(TokenTree::new(subs))
     }

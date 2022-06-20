@@ -116,7 +116,7 @@ TypeCastExpr:
   | [Expr] <as> [Type]
 
 AssignExpr:
-  | [Expr] <assign> [Expr]
+  | [PathExpr] <assign> [Expr]
 
 CompAssignExpr:
   | [Expr] <add_assign> [Expr]

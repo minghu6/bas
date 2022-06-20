@@ -9,7 +9,8 @@ copybin: build
 getbasc: build copybin
 
 testexp0: getbasc
-	@ ./${BARE_COMPILER} ./examples/exp0.bath
+	@ ./${BARE_COMPILER} ./examples/exp0.bath exp0
+	@ ./exp0
 
 testlex:
 	cargo test -- --nocapture test_lex

@@ -55,7 +55,7 @@ mod tests {
         let amod = semantic_analyze(tt, &src)?;
 
         // gen_code(amod, sh_llvm_config(true))?;
-        gen_code(amod, sh_obj_config(true, PathBuf::from("exp0")))?;
+        gen_code(amod, sh_obj_config(false, PathBuf::from("exp0")))?;
 
         Ok(())
     }

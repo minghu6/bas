@@ -11,7 +11,6 @@ pub fn gen_completions(gen: Shell, cmd: &mut Command) {
             let t = tilde("~/.local/share/bash-completion/completions/");
             let dir = PathBuf::from(t.to_string());
 
-            // let bin_name = "hhdm";
             let bin_name = cmd.get_bin_name().unwrap().to_string();
             let fullpath = dir.join(&bin_name);
 

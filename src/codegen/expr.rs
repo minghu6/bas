@@ -51,6 +51,11 @@ impl<'ctx> CodeGen<'ctx> {
             },
             AVal::TypeCast { name, ty } => self.translate_type_cast(name, ty),
             AVal::Var(sym, tagid) => self.translate_var(sym, tagid),
+            AVal::Assign(sym, tagid, valsym) => {
+                let bv = self.find_sym(valsym).unwrap();
+                self.assign_var((sym, tagid), bv);
+                bv
+            },
             _ => unreachable!("{:#?}", var),
         }
     }

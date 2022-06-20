@@ -13,11 +13,15 @@ impl Parser {
             subs.push((ST::PatNoTop, box SN::T(self.parse_pat_no_top()?)));
 
             // Skip Type
+            if self.peek1_t().check_name("colon") {
+                self.unchecked_advance();
+                subs.push((ST::Type, box SN::T(self.parse_ty()?)));
+            }
 
             if self.peek1_t().check_name("assign") {
-                subs.push((ST::assign, box SN::E(self.unchecked_advance())))
+                subs.push((ST::assign, box SN::E(self.unchecked_advance())));
+                subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
             }
-            subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
         }
         else {
             subs.push((ST::Expr, box SN::T(self.parse_expr()?)));

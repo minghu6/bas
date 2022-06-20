@@ -9,7 +9,7 @@ use indexmap::{indexmap, IndexMap};
 use inkwellkit::get_ctx;
 use inkwellkit::types::{FloatType, IntType};
 use m6coll::Entry;
-use m6lexerkit::{str2sym, sym2str, SrcFileInfo, SrcLoc, Symbol, Token};
+use m6lexerkit::{str2sym0, sym2str, SrcFileInfo, SrcLoc, Symbol, Token, Span};
 use pass1::SemanticAnalyzerPass1;
 
 use self::pass2::SemanticAnalyzerPass2;
@@ -79,7 +79,7 @@ pub(crate) const fn aty_f64() -> AType {
     AType::Pri(APriType::Float(8))
 }
 pub(crate) fn aty_opaque_struct(s: &str) -> AType {
-    AType::Pri(APriType::OpaqueStruct(str2sym(s)))
+    AType::Pri(APriType::OpaqueStruct(str2sym0(s)))
 }
 
 
@@ -134,16 +134,31 @@ impl AType {
                     _ => Err(()),
                 }
             },
-
             _ => unreachable!("op: {:#?}", op),
         }
     }
 
+    pub(crate) fn try_cast(&self, ty: &Self) -> Result<(), ()> {
+        if self == ty {
+            return Ok(())
+        }
+
+        match (self, ty) {
+            (Self::Pri(prity1), Self::Pri(prity2)) => {
+                Ok(match (prity1, prity2) {
+                    (APriType::Float(_fmeta), APriType::Int(_imeta)) => (),
+                    (APriType::Int(_imeta1), APriType::Int(_imeta2)) => (),
+                    _ => return Err(())
+                })
+            }
+            _ => Err(())
+        }
+    }
 
 }
 
 pub(crate) struct AFnDec {
-    idt: Token,  // Identifier Token
+    // idt: Token,  // Identifier Token
     // body_idx: Option<usize>,
     pub(crate) name: Symbol,
     pub(crate) params: Vec<AParamPat>,
@@ -250,7 +265,7 @@ impl ASymDef {
 
     pub(crate) fn undefined() -> Self {
         Self {
-            name: str2sym(""),
+            name: str2sym0(""),
             ty: AType::PH,
         }
     }
@@ -290,7 +305,8 @@ pub(crate) enum AVal {
         ty: AType
     },
     ConstAlias(ConstVal),
-    Var(Symbol, usize),  // symname, tagid
+    Var(Symbol, usize),  // symname, tagid : get var value
+    Assign(Symbol, usize, Symbol),  //  namesym, tagid, valsym : set var value
     Break,
     Continue,
     Return(Option<Symbol>),
@@ -301,6 +317,13 @@ impl AVal {
     pub(crate) fn as_block_expr_idx(&self) -> usize {
         match self {
             Self::BlockExpr(idx) => *idx,
+            _ => unreachable!("{:#?}", self),
+        }
+    }
+
+    pub(crate) fn as_var(&self) -> (Symbol, usize) {
+        match self {
+            Self::Var(sym, tagid) => (*sym, *tagid),
             _ => unreachable!("{:#?}", self),
         }
     }
@@ -323,23 +346,6 @@ pub(crate) enum MIRTy {
 }
 
 impl MIR {
-    // fn undefined(name: Symbol) -> Self {
-    //     Self {
-    //         name,
-    //         ty: AType::PH,
-    //         val: AVal::PH,
-    //     }
-    // }
-
-    // fn side_effect(val: AVal) -> Self {
-    //     Self {
-    //         name: str2sym(""),
-    //         tagid: None,
-    //         mirty: MIRTy::ValBind,
-    //         ty: AType::Void,
-    //         val,
-    //     }
-    // }
 
     fn bind_value(name: Symbol, var: AVar) -> Self {
         Self {
@@ -361,12 +367,6 @@ impl MIR {
         }
     }
 
-    // fn var(&self) -> AVar {
-    //     AVar {
-    //         ty: self.ty.clone(),
-    //         val: self.val.clone(),
-    //     }
-    // }
 }
 
 
@@ -382,7 +382,7 @@ pub(crate) struct AScope {
 
 impl AScope {
     pub(crate) fn tmp_name(&self) -> Symbol {
-        str2sym(&format!("!__tmp_{}", self.implicit_bindings.len()))
+        str2sym0(&format!("!__tmp_{}", self.implicit_bindings.len()))
     }
 
     pub(crate) fn ret(&self) -> AVar {
@@ -472,24 +472,26 @@ pub(crate) struct DiagnosisItem {
 }
 pub(crate) struct DiagnosisItem2 {
     dtype: DiagnosisType,
-    tok: Token,
+    span: Span,
 }
 impl DiagnosisItem2 {
     fn into_d1(self, src: &SrcFileInfo) -> DiagnosisItem {
         DiagnosisItem {
             dtype: self.dtype,
-            loc: src.boffset2srcloc(self.tok.span.from),
+            loc: src.boffset2srcloc(self.span.from),
         }
     }
 }
 
 pub enum DiagnosisType {
-    DupItemDef { name: Symbol, prev: Token },
+    DupItemDef { name: Symbol, prev: Span },
     LackFormalParam {},
     IncompatiableOpType { op1: AType, op2: AType },
     IncompatiableIfExprs { if1: AType, oths: Vec<AType> },
     UnknownSymbolBinding(Symbol),
     UnsupportedStringifyType(AType),
+    CantCastType(AType, AType),
+    UnmatchedType(AType, AType)
 }
 
 impl std::fmt::Debug for DiagnosisType {
@@ -521,6 +523,10 @@ impl std::fmt::Debug for DiagnosisType {
                 .debug_tuple("UnsupportedStringifyType")
                 .field(arg0)
                 .finish(),
+            Self::CantCastType(from, to) =>
+                write!(f, "Can't cast {:?} into {:?}", from ,to),
+            Self::UnmatchedType(var, val) =>
+                write!(f, "Unmatched Type  variable: {:?}, value: {:?}", var, val)
         }
     }
 }
@@ -557,7 +563,7 @@ fn _semantic_analyze(
     src: &SrcFileInfo,
 ) -> Result<AMod, Vec<DiagnosisItem2>> {
     let amod =
-        AMod::init(str2sym(opt_osstr_to_str!(&src.get_path().file_stem())));
+        AMod::init(str2sym0(opt_osstr_to_str!(&src.get_path().file_stem())));
     let tt = Rc::new(tt);
 
     let pass1 = SemanticAnalyzerPass1::new(amod, tt.clone());

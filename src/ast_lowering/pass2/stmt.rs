@@ -1,6 +1,5 @@
 use super::SemanticAnalyzerPass2;
 use crate::{
-    ast_lowering::AType,
     parser::{SyntaxType as ST, TokenTree},
 };
 
@@ -18,16 +17,25 @@ impl SemanticAnalyzerPass2 {
 
         if *st == ST::r#let {
             let name = self.analyze_pat_no_top(sns.next().unwrap().1.as_tt());
-            if sns.peek().unwrap().0 != ST::assign {
+            let mut has_type_anno = false;
+
+            if sns.peek().unwrap().0 == ST::Type {
+                let ty = self.analyze_ty(&sns.next().unwrap().1);
                 // Need Explicit Type Annotation
-                self.create_var(name, AType::PH);
-            } else {
-                sns.next().unwrap(); // skip assign
+                self.create_var(name, ty);
+                has_type_anno = true;
+            }
+
+            if sns.peek().unwrap().0 == ST::assign {
+                sns.next().unwrap();  // skip assign
                 let var = self.analyze_expr(sns.next().unwrap().1.as_tt());
 
-                self.create_var(name, var.ty.clone());
+                if !has_type_anno {
+                    self.create_var(name, var.ty.clone());
+                }
                 self.assign_var(name, var);
             }
+
             return;
         }
 

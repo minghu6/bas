@@ -281,7 +281,7 @@ impl Parser {
     fn parse(&mut self, srcfile: &SrcFileInfo) -> ParseResult {
         self.parse_().or_else(|reason| {
             Err(reason.emit_error(
-                srcfile.boffset2srcloc(self.last_t().span.from),
+                srcfile.boffset2srcloc(self.last_t().span().from),
                 srcfile.get_path(),
             ))
         })

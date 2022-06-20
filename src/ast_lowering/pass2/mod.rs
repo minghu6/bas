@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use m6coll::Entry;
-use m6lexerkit::{str2sym, Symbol, Token};
+use m6lexerkit::{str2sym0, Symbol, Span};
 
 use indexmap::indexmap;
 
@@ -47,8 +47,8 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    fn write_dialogsis(&mut self, dtype: R, tok: Token) {
-        self.diagnosis.push(DiagnosisItem2 { dtype, tok })
+    fn write_dialogsis(&mut self, dtype: R, span: Span) {
+        self.diagnosis.push(DiagnosisItem2 { dtype, span })
     }
 
     fn cur_scope(&self) -> &AScope {
@@ -67,7 +67,16 @@ impl SemanticAnalyzerPass2 {
         self.amod.scopes.len() - 1
     }
 
-    pub(crate) fn frame_stack(&self) -> Vec<&AScope> {
+    fn push_single_value_scope(&mut self, avar: AVar) -> usize {
+        let scope_idx = self.push_new_scope();
+        let scope = &mut self.amod.scopes[scope_idx];
+        scope.ret = Some(avar);
+
+        scope_idx
+    }
+
+    #[allow(unused)]
+    pub(crate) fn scope_stack(&self) -> Vec<&AScope> {
         let mut frames = vec![];
 
         let scope = self.cur_scope();
@@ -80,7 +89,6 @@ impl SemanticAnalyzerPass2 {
 
         frames
     }
-
 
     pub(crate) fn analyze(mut self) -> AnalyzeResult2 {
         for (ty, sn) in self.tt.clone().subs.iter() {
@@ -105,6 +113,7 @@ impl SemanticAnalyzerPass2 {
             } else if let Some(paren_idx) = scope.paren {
                 scope = &self.amod.scopes[paren_idx];
             } else {
+                // println!("sym: {:?}, span: {:?}", sym, &sym.1);
                 break None;
             }
         }
@@ -113,14 +122,14 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn find_explicit_sym_or_diagnose(
         &mut self,
         sym: Symbol,
-        idt: Token,
+        span: Span,
     ) -> AVar {
         if let Some((tagid, ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
             AVar { ty, val: AVal::Var(sym, tagid) }
         } else {
-            println!("{:#?}", self.frame_stack());
+            // println!("{:#?}", self.frame_stack());
 
-            self.write_dialogsis(R::UnknownSymbolBinding(sym), idt);
+            self.write_dialogsis(R::UnknownSymbolBinding(sym), span);
 
             AVar::undefined()
         }
@@ -131,7 +140,7 @@ impl SemanticAnalyzerPass2 {
         op: ST,
         symdef1: ASymDef,
         symdef2: ASymDef,
-        idt: Token,
+        span: Span,
     ) -> (ASymDef, ASymDef) {
         // Insert Type Cast
         let sym1 = symdef1.name;
@@ -160,7 +169,7 @@ impl SemanticAnalyzerPass2 {
         } else {
             self.write_dialogsis(
                 R::IncompatiableOpType { op1: symdef1.ty, op2: symdef2.ty },
-                idt
+                span
             );
 
             (ASymDef::undefined(), ASymDef::undefined())
@@ -181,13 +190,13 @@ impl SemanticAnalyzerPass2 {
 
     /// For Explicit Symbol
     pub(crate) fn assign_var(&mut self, sym: Symbol, var: AVar) -> Symbol {
-        let (tagid, _ty) = self.find_explicit_sym_ty_and_tag(&sym).unwrap();
+        let (tagid, ty) = self.find_explicit_sym_ty_and_tag(&sym).unwrap();
 
-        let scope = self.cur_scope_mut();
+        if var.ty != ty {
+            self.write_dialogsis(R::UnmatchedType(var.ty.clone(), ty), sym.1)
+        }
 
-        // TODO: check type consistency
-
-        scope.mirs.push(MIR::assign_var(sym, tagid, var.clone()));
+        self.cur_scope_mut().mirs.push(MIR::assign_var(sym, tagid, var.clone()));
 
         sym
     }
@@ -210,13 +219,18 @@ impl SemanticAnalyzerPass2 {
         let scope = self.cur_scope_mut();
 
         scope.explicit_bindings.push(Entry(sym, (tagid, ty)));
+    }
 
+    pub(crate) fn cast_val(&mut self, varsym: Symbol, ty: AType) -> Symbol {
+        let castval = AVal::TypeCast { name: varsym, ty: ty.clone() };
+
+        self.bind_value(AVar { ty, val: castval })
     }
 
     pub(crate) fn build_strinify_var(
         &mut self,
         var: AVar,
-        idt: Token,
+        span: Span,
     ) -> Symbol {
         match var.ty {
             AType::Pri(prity) => {
@@ -225,15 +239,15 @@ impl SemanticAnalyzerPass2 {
 
                 let val = match prity {
                     APriType::Float(8) => AVal::FnCall {
-                        call_fn: str2sym("stringify_f64"),
+                        call_fn: str2sym0("stringify_f64"),
                         args: vec![arg0],
                     },
                     APriType::Str => AVal::FnCall {
-                        call_fn: str2sym("strdup"),
+                        call_fn: str2sym0("strdup"),
                         args: vec![arg0],
                     },
                     APriType::Int(_) => AVal::FnCall {
-                        call_fn: str2sym("stringify_i32"),
+                        call_fn: str2sym0("stringify_i32"),
                         args: vec![arg0],
                     },
                     _ => todo!(),
@@ -241,13 +255,13 @@ impl SemanticAnalyzerPass2 {
 
                 self.bind_value(AVar { ty: aty_str(), val })
             }
-            AType::PH => str2sym(""),
+            AType::PH => str2sym0(""),
             _ => {
                 self.write_dialogsis(
                     R::UnsupportedStringifyType(var.ty.clone()),
-                    idt,
+                    span,
                 );
-                str2sym("")
+                str2sym0("")
             }
         }
     }
@@ -272,7 +286,7 @@ impl SemanticAnalyzerPass2 {
         let sym_vec = self.bind_value(AVar {
             ty: aty_opaque_struct("Vec"),
             val: AVal::FnCall {
-                call_fn: str2sym("vec_new_ptr"),
+                call_fn: str2sym0("vec_new_ptr"),
                 args: vec![cap],
             },
         });
@@ -289,7 +303,7 @@ impl SemanticAnalyzerPass2 {
             self.bind_value(AVar {
                 ty: aty_int(-4),
                 val: AVal::FnCall {
-                    call_fn: str2sym("vec_push_ptr"),
+                    call_fn: str2sym0("vec_push_ptr"),
                     args: vec![sym_vec, sym_str],
                 },
             });

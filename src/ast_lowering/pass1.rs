@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use m6lexerkit::{Token, Symbol};
+use m6lexerkit::{Symbol, Span};
 
 use super::{AMod, AnalyzeResult2, DiagnosisItem2, AType, APriType, DiagnosisType as R, AFnDec, AParamPat};
 use crate::{parser::{SyntaxType as ST, SyntaxNode as SN, TokenTree}, ast_lowering::{aty_i32, aty_f64}};
@@ -21,8 +21,8 @@ impl SemanticAnalyzerPass1 {
         }
     }
 
-    fn write_dialogsis(&mut self, dtype: R, tok: Token) {
-        self.diagnosis.push(DiagnosisItem2 { dtype, tok })
+    fn write_dialogsis(&mut self, dtype: R, span: Span) {
+        self.diagnosis.push(DiagnosisItem2 { dtype, span })
     }
 
     pub(crate) fn analyze(mut self) -> AnalyzeResult2 {
@@ -55,10 +55,10 @@ impl SemanticAnalyzerPass1 {
         let idt = *sns.next().unwrap().1.as_tok();
         let fn_name = idt.value;
 
-        if let Some(afn) = self.amod.afns.get(&fn_name) {
+        if let Some(_afn) = self.amod.afns.get(&fn_name) {
             self.write_dialogsis(
-                R::DupItemDef { name:fn_name, prev: afn.idt },
-                idt
+                R::DupItemDef { name:fn_name, prev: fn_name.1 },
+                idt.span()
             );
             return;
         }
@@ -80,7 +80,6 @@ impl SemanticAnalyzerPass1 {
         }
 
         let afn = AFnDec {
-            idt,
             // body_idx: None,
             name: fn_name,
             params,
@@ -99,7 +98,7 @@ impl SemanticAnalyzerPass1 {
             let (param_ty, param_sn) = sns.next().unwrap();
 
             if *param_ty == ST::id {
-                self.write_dialogsis(R::LackFormalParam {  }, *param_sn.as_tok());
+                self.write_dialogsis(R::LackFormalParam {  }, param_sn.as_tok().span());
             }
 
             params.push(self.analyze_param_pat(param_sn.as_tt()));
@@ -119,30 +118,27 @@ impl SemanticAnalyzerPass1 {
         AParamPat { formal, ty }
     }
 
-    pub(crate) fn analyze_pat_no_top(&mut self, sn: &TokenTree) -> Symbol {
-        let id = sn.subs[0].1.as_tok();
+    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TokenTree) -> Symbol {
+        let id = tt.subs[0].1.as_tok();
 
         id.name
     }
 
     pub(crate) fn analyze_ty(&mut self, sn: &SN) -> AType {
-        match sn {
-            SN::T(_) => todo!(),
-            SN::E(tok) => {
-                // analyze alias -- skip (inner multiple scan)
-                if tok.check_value("int") {
-                    return aty_i32();
-                }
-                if tok.check_value("float") {
-                    return aty_f64();
-                }
-                if tok.check_value("str") {
-                    return AType::Pri(APriType::Str);
-                }
+        let tok_id = sn.as_tt().subs[0].1.as_tok();
 
-                todo!("ty: {}", tok);
-            }
+        // analyze alias -- skip (inner multiple scan)
+        if tok_id.check_value("int") {
+            return aty_i32();
         }
+        if tok_id.check_value("float") {
+            return aty_f64();
+        }
+        if tok_id.check_value("str") {
+            return AType::Pri(APriType::Str);
+        }
+
+        todo!("unknown ty: {:?}", tok_id.value);
     }
 
 }
