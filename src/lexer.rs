@@ -112,26 +112,25 @@ fn tokenize_(source: &SrcFileInfo) -> TokenizeResult {
     tokenize__(source, &MATCHERS[..])
 }
 
-#[cfg(test)]
-fn display_pure_tokval(tokens: &[Token], src: &SrcFileInfo) {
-    for token in tokens.iter() {
-        println!(
-            "<{}>: {}: {}",
-            token.name_string(),
-            token.value_string(),
-            src.boffset2srcloc(token.span().from)
-        )
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use m6lexerkit::SrcFileInfo;
+    use m6lexerkit::{SrcFileInfo, Token};
 
-    use super::{display_pure_tokval, tokenize};
+    use super::tokenize;
+
+    fn display_pure_tokval(tokens: &[Token], src: &SrcFileInfo) {
+        for token in tokens.iter() {
+            println!(
+                "<{}>: {}: {}",
+                token.name_string(),
+                token.value_string(),
+                src.boffset2srcloc(token.span().from)
+            )
+        }
+    }
 
     #[test]
     fn test_lexer() {
@@ -140,7 +139,7 @@ mod tests {
 
         match tokenize(&srcfile) {
             Ok(tokens) => {
-                display_pure_tokval(&tokens, &srcfile);
+                display_pure_tokval(&tokens[..], &srcfile);
             }
             Err(err) => println!("{}", err),
         }

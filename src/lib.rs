@@ -6,7 +6,9 @@
 //! (https://github.com/rust-lang/rust/issues/56254) 还是2019年
 //! 而且还停留在调查阶段，现在（2022年）几乎没有任何理由认为这个进程会被突然推进，
 //! 至少edition 2021绝对不会出问题
-#![allow(mutable_borrow_reservation_conflict)]
+//!
+//! 现在已经通过了
+// #![allow(mutable_borrow_reservation_conflict)]
 
 mod lexer;
 mod parser;

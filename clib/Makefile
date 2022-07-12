@@ -1,5 +1,6 @@
 .PHONY: libbas.a  # which enable rebuild always
 .PHONY: vec.o
+.PHONY: vec.so
 .PHONY: aa.o
 .PHONY: lib.o
 .PHONY: cstr.o
@@ -9,6 +10,10 @@ libbas.a: vec.o aa.o cstr.o lib.o
 
 vec.o: src/vec.c
 	@ gcc -c -g -fpic -o $@ $^
+
+vec.so.1.0: src/vec.c
+	# The -Wl option passes options along to the linker (in this case the -soname linker option)
+	@ gcc -shared -fpic -Wl,-soname,vec.so -o $@ $^
 
 aa.o: src/aa.c
 	@ gcc -c -g -fpic -o $@ $^
