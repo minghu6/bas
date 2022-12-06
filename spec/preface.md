@@ -138,6 +138,8 @@ SideEffectExpr:
 
 Type:
   | <id>
+  | lbracket <id> <rbracket>
+
 
 GroupedExpr:
   | <lparen> [Expr] <rparen>

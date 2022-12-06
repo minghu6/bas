@@ -8,7 +8,7 @@ use std::rc::Rc;
 use indexmap::{indexmap, IndexMap};
 use inkwellkit::get_ctx;
 use inkwellkit::types::{FloatType, IntType};
-use m6coll::Entry;
+use m6coll::KVEntry as Entry;
 use m6lexerkit::{str2sym0, sym2str, SrcFileInfo, SrcLoc, Symbol, Token, Span};
 use pass1::SemanticAnalyzerPass1;
 

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use m6coll::Entry;
+use m6coll::KVEntry as Entry;
 use m6lexerkit::{str2sym0, Symbol, Span};
 
 use indexmap::indexmap;

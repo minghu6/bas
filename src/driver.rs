@@ -14,11 +14,11 @@ use crate::{
 pub struct RunCompiler {}
 
 impl RunCompiler {
-    pub fn new(
-        src: &Path,
+    pub fn new<P: AsRef<Path>>(
+        src: &P,
         config: CompilerConfig,
     ) -> Result<Self, Box<dyn Error>> {
-        let src = SrcFileInfo::new(src)?;
+        let src = SrcFileInfo::new(src.as_ref())?;
 
         let tokens = tokenize(&src)?;
         let tt = parse(tokens, &src)?;
