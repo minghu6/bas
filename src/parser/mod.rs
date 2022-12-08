@@ -123,6 +123,14 @@ impl TokenTree {
     pub(super) fn len(&self) -> usize {
         self.subs.len()
     }
+
+    pub(super) fn last(&self) -> &(SyntaxType, Box<SyntaxNode>) {
+        self.last_nth(1)
+    }
+
+    pub(super) fn last_nth(&self, last_idx: usize) -> &(SyntaxType, Box<SyntaxNode>) {
+        &self.subs[self.len() - last_idx]
+    }
 }
 
 impl std::fmt::Debug for TokenTree {
@@ -155,8 +163,6 @@ impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> IndexMut<I> for TokenTree {
         IndexMut::index_mut(&mut self.subs, index)
     }
 }
-
-
 
 
 #[derive(Debug)]

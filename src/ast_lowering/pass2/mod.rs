@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, Symbol, Span};
+use m6lexerkit::{str2sym0, Symbol, Span, sym2str};
 
 use indexmap::indexmap;
 
@@ -190,13 +190,14 @@ impl SemanticAnalyzerPass2 {
 
     /// For Explicit Symbol
     pub(crate) fn assign_var(&mut self, sym: Symbol, var: AVar) -> Symbol {
-        let (tagid, ty) = self.find_explicit_sym_ty_and_tag(&sym).unwrap();
-
-        if var.ty != ty {
-            self.write_dialogsis(R::UnmatchedType(var.ty.clone(), ty), sym.1)
+        if let Some((tagid, _ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
+            self.cur_scope_mut().mirs.push(
+                MIR::assign_var(sym, tagid, var)
+            );
         }
-
-        self.cur_scope_mut().mirs.push(MIR::assign_var(sym, tagid, var.clone()));
+        else {
+            unreachable!("Compiler Bug Unmatched sym {}", sym2str(sym))
+        }
 
         sym
     }
@@ -296,8 +297,17 @@ impl SemanticAnalyzerPass2 {
                 s
             }
             else {
-                let (tagid, ty) = self.find_explicit_sym_ty_and_tag(&s).unwrap();
-                self.bind_value(AVar { ty, val: AVal::Var(s, tagid) })
+                let var = self.find_explicit_sym_or_diagnose(s, Span::default());
+
+                match var.val {
+                    AVal::Var(sym, _) => {
+                        self.bind_value(var);
+                        sym
+                    },
+                    _ => {
+                        return str2sym0("");
+                    }
+                }
             };
 
             self.bind_value(AVar {

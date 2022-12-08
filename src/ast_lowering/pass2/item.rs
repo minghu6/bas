@@ -15,24 +15,16 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
+    /// id(fn name) - FnParams(fn params) - Ret(ret type) -  -BlockExpr(body)
     pub(crate) fn do_analyze_fn(&mut self, tt: &TokenTree) {
-        let mut sns = tt.subs.iter().peekable();
-
-        let fn_name = sns.next().unwrap().1.as_tok().value;
-
-        if sns.peek().unwrap().0 != ST::BlockExpr {
-            sns.next();
-        }
-        debug_assert_eq!(sns.peek().unwrap().0, ST::BlockExpr);
-        let sn = &sns.next().unwrap().1;
+        let fn_name = tt[0].1.as_tok().value;
+        let body = tt.last().1.as_tt();
 
         // There must be definition by Pass1
 
-        // Set current fn name
-
         self.cur_fn = Some(fn_name);
 
-        // Unpack Param
+        /* Unpack Param */
 
         let scope_idx = self.push_new_scope();
         let scope = &mut self.amod.scopes[scope_idx];
@@ -53,7 +45,9 @@ impl SemanticAnalyzerPass2 {
             ))
         }
 
-        self.do_analyze_block_with_scope(scope_idx, sn.as_tt().subs[0].1.as_tt());
+        // body to stmts
+        debug_assert_eq!(body[0].0, ST::Stmts);
+        self.do_analyze_block_with_scope(scope_idx, body[0].1.as_tt());
 
         let val = AVal::DefFn {
             name: fn_name,

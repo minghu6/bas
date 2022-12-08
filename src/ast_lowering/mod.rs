@@ -327,7 +327,17 @@ impl AVal {
             _ => unreachable!("{:#?}", self),
         }
     }
+
+    #[allow(unused)]
+    pub(crate) fn get_tagid(&self) -> Option<usize> {
+        match self {
+            AVal::Var(_, tagid) | AVal::Assign(_, tagid, _) => Some(*tagid),
+            _ => None
+        }
+    }
 }
+
+
 
 #[derive(Debug, Clone)]
 pub(crate) struct MIR {
@@ -465,6 +475,7 @@ pub enum SemanticErrorReason {
     UnknownSymBinding(Symbol),
     UnsupportedStringifyType(AType),
     CantCastType(AType, AType),
+    #[allow(unused)]
     UnmatchedType(AType, AType),
     UnkonwnType
 }
@@ -489,41 +500,44 @@ impl std::fmt::Debug for SemanticError {
             // writeln!(f, "{}, {:#?}", item.loc, item.dtype)?;
             match cause {
                 R::DupItemDef { name, prev } => {
-                    writeln!(f, "Duplicate item `{}` definition", sym2str(*name))?;
+                    writeln!(f, "Duplicate item `{}` definition:\n", sym2str(*name))?;
                     /* frontwards reference */
                     ref_source!(prev, "=", f, self.src);
                     Ok(())
                 }
                 R::LackFormalParam => {
-                    writeln!(f, "Lack formal param")
+                    writeln!(f, "Lack formal param:\n")
                 }
                 R::IncompatOpType { op1, op2 } => {
-                    writeln!(f, "No compatiable operator between {op1:?} and {op2:?}")
+                    writeln!(f, "No compatiable operator between {op1:?} and {op2:?}:\n")
                 }
                 R::IncompatIfExprs { if1, oths } => {
-                    writeln!(f, "If block type {if1:?} diffs in {oths:#?}", )
+                    writeln!(f, "If block type {if1:?} diffs in {oths:#?}:\n", )
                 }
                 R::UnknownSymBinding(arg0) => {
-                    writeln!(f, "Unkonwn symbol {}", sym2str(*arg0))
+                    writeln!(f, "Unkonwn symbol {}:\n", sym2str(*arg0))
                 }
                 R::UnsupportedStringifyType(arg0) => {
-                    writeln!(f, "Can't stringify {arg0:?}")
+                    writeln!(f, "Can't stringify {arg0:?}:\n")
                 }
                 R::CantCastType(from, to) =>
-                    writeln!(f, "Can't cast {:?} into {:?}", from ,to),
+                    writeln!(f, "Can't cast {:?} into {:?}:\n", from ,to),
                 R::UnmatchedType(var, val) =>
-                    writeln!(f, "Unmatched Type variable: {:?}, value: {:?}", var, val),
+                    writeln!(f, "Unmatched Type variable: {:?}, value: {:?}:\n", var, val),
                 R::UnkonwnType =>
-                    writeln!(f, "Unknown Type")
+                    writeln!(f, "Unknown Type:\n")
             }?;
 
             ref_source!(span, "^", f, self.src);
             writeln!(f)?;
             writeln!(f)?;
         }
+
         Ok(())
     }
+
 }
+
 
 impl std::fmt::Display for SemanticError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -610,7 +624,7 @@ pub(crate) fn analyze_ty(tt: &TokenTree) -> Result<AType, Span> {
 
         let tok2 = &tt[1].1.as_tok();
 
-        return match tok2.name_string().as_str() {
+        return match tok2.value_string().as_str() {
             "int" => {
                 Ok(AType::Arr(vec![APriType::Int(-4)]))
             }

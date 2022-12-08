@@ -47,7 +47,7 @@ impl Parser {
             self.unchecked_advance();
 
             let ret = box SN::T(self.parse_ty()?);
-            subs.push((ST::ret, ret));
+            subs.push((ST::Type, ret));
         }
 
         subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));

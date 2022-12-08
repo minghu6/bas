@@ -324,6 +324,9 @@ impl SemanticAnalyzerPass2 {
         // stringlize symbol
         for sym in syms.iter() {
             let var = self.find_explicit_sym_or_diagnose(*sym, idt.span());
+            if var.ty == AType::PH {
+                return var;
+            }
             string_syms.push(self.build_strinify_var(var, idt.span()));
             sym_syms.push(self.build_const_str(*sym));
         }
