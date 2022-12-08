@@ -9,3 +9,4 @@ exp*
 libbas.a
 
 .vscode/
+.rdbgrc.breakpoints

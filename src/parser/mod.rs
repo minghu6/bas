@@ -1,10 +1,9 @@
-use std::{
-    fmt::{Debug, Write},
-    path::{Path, PathBuf},
-};
+use std::{fmt::Debug, ops::{Index, IndexMut}, slice::SliceIndex};
 
-use m6lexerkit::{SrcFileInfo, SrcLoc, Token};
+use m6lexerkit::{SrcFileInfo, Token};
 use m6parserkit::gen_syntax_enum;
+
+use crate::ref_source;
 
 mod expr;
 mod item;
@@ -120,6 +119,10 @@ impl TokenTree {
     pub(super) fn new(subs: Vec<(SyntaxType, Box<SyntaxNode>)>) -> Self {
         Self { subs }
     }
+
+    pub(super) fn len(&self) -> usize {
+        self.subs.len()
+    }
 }
 
 impl std::fmt::Debug for TokenTree {
@@ -138,6 +141,23 @@ impl std::fmt::Debug for TokenTree {
         dbs.finish()
     }
 }
+
+impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> Index<I> for TokenTree {
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(&self.subs, index)
+    }
+}
+
+impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> IndexMut<I> for TokenTree {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(&mut self.subs, index)
+    }
+}
+
+
+
 
 #[derive(Debug)]
 pub(crate) enum SyntaxNode {
@@ -169,6 +189,7 @@ pub(crate) type ParseResult = Result<TokenTree, ParseError>;
 pub(crate) type ParseResult2 = Result<TokenTree, ParseErrorReason>;
 
 
+#[allow(unused)]
 pub enum ParseErrorReason {
     Expect {
         expect: SyntaxType,
@@ -193,18 +214,8 @@ impl Debug for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:?}", self.reason)?;
         let found_tok = self.reason.token();
-        let loc = self.src.boffset2srcloc(found_tok.span.from);
-        let linestr = self.src.linestr(found_tok.span).unwrap();
 
-        writeln!(f, "{linestr}")?;
-        writeln!(f, "{}{}", " ".repeat(loc.col - 1), "^".repeat(found_tok.span.len()))?;
-        writeln!(
-            f,
-            "--> {}:{}:{}",
-            self.src.get_path().to_string_lossy(),
-            loc.ln,
-            loc.col
-        )?;
+        ref_source!(found_tok.span, "^", f, self.src);
 
         Ok(())
     }
@@ -221,11 +232,11 @@ impl ParseErrorReason {
     pub(super) fn token(&self) -> &Token {
         match self {
             Self::Expect {
-                expect,
-                four,
+                expect: _,
+                four: _,
                 found,
             } => found,
-            Self::Unrecognized { four, found } => found,
+            Self::Unrecognized { four: _, found } => found,
         }
     }
 }
@@ -290,13 +301,13 @@ impl Parser {
         Ok(self.unchecked_advance())
     }
 
-    fn last_t(&self) -> &Token {
-        if self.cursor == 0 {
-            panic!("cursor at ZEOR hasn't last");
-        }
+    // fn last_t(&self) -> &Token {
+    //     if self.cursor == 0 {
+    //         panic!("cursor at ZEOR hasn't last");
+    //     }
 
-        &self.tokens[self.cursor - 1]
-    }
+    //     &self.tokens[self.cursor - 1]
+    // }
 
     fn peek1_t(&self) -> &Token {
         self.peek_t_(0)
@@ -399,10 +410,8 @@ mod tests {
 
     #[test]
     fn test_parser() -> Result<(), Box<dyn std::error::Error>> {
-        let path = PathBuf::from("./examples/exp0.bath");
+        let path = PathBuf::from("./examples/exp1.bath");
         let src = SrcFileInfo::new(&path).unwrap();
-
-        // println!("{:#?}", sp_m(srcfile.get_srcstr(), SrcLoc { ln: 0, col: 0 }));
 
         let tokens = tokenize(&src)?;
         let tt = parse(tokens, &src)?;

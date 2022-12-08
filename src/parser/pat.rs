@@ -10,7 +10,7 @@ use super::{
 
 impl Parser {
     pub(crate) fn parse_pat_no_top(&mut self) -> ParseResult2 {
-        let four = ST::Type;
+        let four = ST::PatNoTop;
         let mut subs = vec![];
 
         subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));

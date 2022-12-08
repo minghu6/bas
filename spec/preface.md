@@ -21,10 +21,7 @@ FnParams:
   | [FnParam]? (<comma> [FnParam])*
 
 FnParam:
-  | ([FnParamPat] | [Type])
-
-FnParamPat:
-  | [PatNoTop] <colon> [Type]
+  | ([PatNoTop] <colon> [Type] | [Type])
 
 PatNoTop:
   | [IdentPat]
@@ -183,4 +180,8 @@ if COND elif elif else -->
 
 
 ## 数据结构(builtin)
+
+### Dynamic Array: [T]
+
+[i32]/[u8]/[ptr]
 

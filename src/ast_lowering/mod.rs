@@ -9,12 +9,12 @@ use indexmap::{indexmap, IndexMap};
 use inkwellkit::get_ctx;
 use inkwellkit::types::{FloatType, IntType};
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, sym2str, SrcFileInfo, SrcLoc, Symbol, Token, Span};
+use m6lexerkit::{str2sym0, sym2str, SrcFileInfo, Symbol, Token, Span};
 use pass1::SemanticAnalyzerPass1;
 
 use self::pass2::SemanticAnalyzerPass2;
-use crate::opt_osstr_to_str;
-use crate::parser::{SyntaxNode, SyntaxType as ST, TokenTree};
+use crate::{opt_osstr_to_str, ref_source};
+use crate::parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -447,109 +447,108 @@ impl AParamPat {
 ////////////////////////////////////////////////////////////////////////////////
 //// Diagnosis
 
-pub(crate) struct SemanticError {
-    diagnosis: Vec<DiagnosisItem>,
+pub(crate) type AnalyzeResult = Result<AMod, SemanticError>;
+pub(crate) type AnalyzeResult2 = Result<AMod, Vec<(R, Span)>>;
+
+
+pub struct SemanticError {
+    src: SrcFileInfo,
+    cause_lists: Vec<(SemanticErrorReason, Span)>,
 }
+
+
+pub enum SemanticErrorReason {
+    DupItemDef { name: Symbol, prev: Span },
+    LackFormalParam,
+    IncompatOpType { op1: AType, op2: AType },
+    IncompatIfExprs { if1: AType, oths: Vec<AType> },
+    UnknownSymBinding(Symbol),
+    UnsupportedStringifyType(AType),
+    CantCastType(AType, AType),
+    UnmatchedType(AType, AType),
+    UnkonwnType
+}
+use SemanticErrorReason as R;
+
+
 impl std::fmt::Debug for SemanticError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for item in self.diagnosis.iter() {
-            writeln!(f, "{}, {:#?}", item.loc, item.dtype)?;
-            writeln!(f, "{}", "-".to_string().repeat(80))?;
+        writeln!(f)?;
+        writeln!(f)?;
+
+        for (i, (cause, span)) in self.cause_lists.iter().enumerate() {
+            writeln!(
+                f,
+                "{} cause-{:003} {}",
+                "-".to_string().repeat(34),
+                i+1,
+                "-".to_string().repeat(34),
+            )?;
+            writeln!(f)?;
+
+            // writeln!(f, "{}, {:#?}", item.loc, item.dtype)?;
+            match cause {
+                R::DupItemDef { name, prev } => {
+                    writeln!(f, "Duplicate item `{}` definition", sym2str(*name))?;
+                    /* frontwards reference */
+                    ref_source!(prev, "=", f, self.src);
+                    Ok(())
+                }
+                R::LackFormalParam => {
+                    writeln!(f, "Lack formal param")
+                }
+                R::IncompatOpType { op1, op2 } => {
+                    writeln!(f, "No compatiable operator between {op1:?} and {op2:?}")
+                }
+                R::IncompatIfExprs { if1, oths } => {
+                    writeln!(f, "If block type {if1:?} diffs in {oths:#?}", )
+                }
+                R::UnknownSymBinding(arg0) => {
+                    writeln!(f, "Unkonwn symbol {}", sym2str(*arg0))
+                }
+                R::UnsupportedStringifyType(arg0) => {
+                    writeln!(f, "Can't stringify {arg0:?}")
+                }
+                R::CantCastType(from, to) =>
+                    writeln!(f, "Can't cast {:?} into {:?}", from ,to),
+                R::UnmatchedType(var, val) =>
+                    writeln!(f, "Unmatched Type variable: {:?}, value: {:?}", var, val),
+                R::UnkonwnType =>
+                    writeln!(f, "Unknown Type")
+            }?;
+
+            ref_source!(span, "^", f, self.src);
+            writeln!(f)?;
+            writeln!(f)?;
         }
         Ok(())
     }
 }
+
 impl std::fmt::Display for SemanticError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
+
 impl std::error::Error for SemanticError {}
-
-pub(crate) struct DiagnosisItem {
-    dtype: DiagnosisType,
-    loc: SrcLoc,
-}
-pub(crate) struct DiagnosisItem2 {
-    dtype: DiagnosisType,
-    span: Span,
-}
-impl DiagnosisItem2 {
-    fn into_d1(self, src: &SrcFileInfo) -> DiagnosisItem {
-        DiagnosisItem {
-            dtype: self.dtype,
-            loc: src.boffset2srcloc(self.span.from),
-        }
-    }
-}
-
-pub enum DiagnosisType {
-    DupItemDef { name: Symbol, prev: Span },
-    LackFormalParam {},
-    IncompatiableOpType { op1: AType, op2: AType },
-    IncompatiableIfExprs { if1: AType, oths: Vec<AType> },
-    UnknownSymbolBinding(Symbol),
-    UnsupportedStringifyType(AType),
-    CantCastType(AType, AType),
-    UnmatchedType(AType, AType)
-}
-
-impl std::fmt::Debug for DiagnosisType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DupItemDef { name, prev } => f
-                .debug_struct("DupItemDef")
-                .field("name", &sym2str(*name))
-                .field("prev", prev)
-                .finish(),
-            Self::LackFormalParam {} => {
-                f.debug_struct("LackFormalParam").finish()
-            }
-            Self::IncompatiableOpType { op1, op2 } => f
-                .debug_struct("IncompatiableOpType")
-                .field("op1", op1)
-                .field("op2", op2)
-                .finish(),
-            Self::IncompatiableIfExprs { if1, oths } => f
-                .debug_struct("IncompatiableIfExprs")
-                .field("if1", if1)
-                .field("oths", oths)
-                .finish(),
-            Self::UnknownSymbolBinding(arg0) => f
-                .debug_tuple("UnknownSymbolBinding")
-                .field(&sym2str(*arg0))
-                .finish(),
-            Self::UnsupportedStringifyType(arg0) => f
-                .debug_tuple("UnsupportedStringifyType")
-                .field(arg0)
-                .finish(),
-            Self::CantCastType(from, to) =>
-                write!(f, "Can't cast {:?} into {:?}", from ,to),
-            Self::UnmatchedType(var, val) =>
-                write!(f, "Unmatched Type  variable: {:?}, value: {:?}", var, val)
-        }
-    }
-}
-
-pub(crate) type AnalyzeResult = Result<AMod, SemanticError>;
-pub(crate) type AnalyzeResult2 = Result<AMod, Vec<DiagnosisItem2>>;
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //// SyntaxNode Implements
 
-impl SyntaxNode {
+impl SN {
     pub(crate) fn as_tt(&self) -> &TokenTree {
         match self {
-            SyntaxNode::T(ref tt) => tt,
-            SyntaxNode::E(_) => unreachable!("{:?}", self),
+            Self::T(ref tt) => tt,
+            SN::E(_) => unreachable!("{:?}", self),
         }
     }
 
     pub(crate) fn as_tok(&self) -> &Token {
         match self {
-            SyntaxNode::T(_) => unreachable!("{:?}", self),
-            SyntaxNode::E(ref tok) => tok,
+            Self::T(_) => unreachable!("{:?}", self),
+            Self::E(ref tok) => tok,
         }
     }
 }
@@ -561,7 +560,7 @@ impl SyntaxNode {
 fn _semantic_analyze(
     tt: TokenTree,
     src: &SrcFileInfo,
-) -> Result<AMod, Vec<DiagnosisItem2>> {
+) -> AnalyzeResult2 {
     let amod =
         AMod::init(str2sym0(opt_osstr_to_str!(&src.get_path().file_stem())));
     let tt = Rc::new(tt);
@@ -581,12 +580,81 @@ pub(crate) fn semantic_analyze(
 ) -> AnalyzeResult {
     match _semantic_analyze(tt, src) {
         Ok(amod) => Ok(amod),
-        Err(ditems) => {
-            let diagnosis =
-                ditems.into_iter().map(|ditem| ditem.into_d1(src)).collect();
-
-            Err(SemanticError { diagnosis })
+        Err(cause_lists) => {
+            Err(SemanticError { cause_lists, src: src.clone() })
         }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Common analyze functions
+
+pub(crate) fn analyze_ty(tt: &TokenTree) -> Result<AType, Span> {
+    let tok_id = tt[0].1.as_tok();
+
+    // analyze alias -- skip (inner multiple scan)
+    if tok_id.check_value("int") {
+        return Ok(aty_i32());
+    }
+    if tok_id.check_value("float") {
+        return Ok(aty_f64());
+    }
+    if tok_id.check_value("str") {
+        return Ok(AType::Pri(APriType::Str));
+    }
+    if tok_id.check_value("[") {
+        if tt.len() < 2 {
+            return Err(tok_id.span);
+        }
+
+        let tok2 = &tt[1].1.as_tok();
+
+        return match tok2.name_string().as_str() {
+            "int" => {
+                Ok(AType::Arr(vec![APriType::Int(-4)]))
+            }
+            "float" => {
+                Ok(AType::Arr(vec![APriType::Float(8)]))
+            }
+            _ => {
+                if tt.len() < 3 {
+                    return Err(Span { from: tok_id.span.from, end: tok2.span.end })
+                }
+                let tok3 = &tt[2].1.as_tok();
+                return Err(Span { from: tok_id.span.from, end: tok3.span.end })
+            }
+        }
+    }
+
+    Err(tok_id.span)
+
+}
+
+
+pub(crate) fn analyze_pat_no_top(tt: &TokenTree) -> Symbol {
+    // println!("analyze_pat_no_top: {:?}", tt);
+
+    let id = tt[0].1.as_tok();
+
+    id.value
+}
+
+
+pub(crate) fn write_diagnosis(cause_lists: &mut Vec<(R, Span)>, r: R, span: Span) {
+    cause_lists.push((r, span))
+}
+
+#[allow(unused)]
+pub(crate) fn toks_to_span(toks: &[Token]) -> Span {
+    if toks.len() == 0 {
+        Span::default()
+    }
+    else if toks.len() == 1 {
+        toks[0].span
+    }
+    else {
+        Span { from: toks[0].span.from, end: toks.last().unwrap().span.end }
     }
 }
 
@@ -604,7 +672,7 @@ mod tests {
 
     #[test]
     fn test_analyze() -> Result<(), Box<dyn std::error::Error>> {
-        let path = PathBuf::from("./examples/exp0.bath");
+        let path = PathBuf::from("./examples/exp1.bath");
         let src = SrcFileInfo::new(&path).unwrap();
 
         let tokens = tokenize(&src)?;

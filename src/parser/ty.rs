@@ -13,7 +13,14 @@ impl Parser {
         let four = ST::Type;
         let mut subs = vec![];
 
-        subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+        if self.peek1_t().check_value("[") {
+            subs.push((ST::lbracket, box SN::E(self.expect_eat_tok1_t(ST::lbracket, four)?)));
+            subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+            subs.push((ST::rbracket, box SN::E(self.expect_eat_tok1_t(ST::rbracket, four)?)));
+        }
+        else {
+            subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+        }
 
         return Ok(TokenTree::new(subs));
     }

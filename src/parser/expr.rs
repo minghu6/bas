@@ -88,7 +88,7 @@ impl Parser {
             else if tok1.check_name("id") {
                 let tok2 = self.peek2_t();
 
-                if tok2.check_names_in(&["inc", "dec"]) {
+                if tok2.check_values_in(&["++", "--"]) {
                     ty = ST::SideEffectExpr;
                     tt = box SN::T(self.parse_side_effect_expr()?);
                 }
@@ -327,7 +327,6 @@ impl Parser {
         }
 
         if ops.is_empty() {
-            debug_assert_eq!(expr_units.len(), 1);
             Ok(TokenTree::new(expr_units))
         } else {
             Ok(map_infix_expr_to_tt(parse_infix_expr(ops, expr_units)))

@@ -6,7 +6,7 @@ use super::SemanticAnalyzerPass2;
 use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef};
 use crate::{
     ast_lowering::{
-        APriType, AType, AVal, AVar, ConstVal, DiagnosisType as R,
+        APriType, AType, AVal, AVar, ConstVal, SemanticErrorReason as R,
     },
     parser::{SyntaxType as ST, TokenTree},
 };
@@ -400,7 +400,7 @@ impl SemanticAnalyzerPass2 {
 
         if !oths.is_empty() {
             self.write_dialogsis(
-                R::IncompatiableIfExprs {
+                R::IncompatIfExprs {
                     if1: if_ty.clone(),
                     oths,
                 },

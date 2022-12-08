@@ -20,7 +20,7 @@ impl SemanticAnalyzerPass2 {
             let mut has_type_anno = false;
 
             if sns.peek().unwrap().0 == ST::Type {
-                let ty = self.analyze_ty(&sns.next().unwrap().1);
+                let ty = self.analyze_ty(&sns.next().unwrap().1.as_tt());
                 // Need Explicit Type Annotation
                 self.create_var(name, ty);
                 has_type_anno = true;

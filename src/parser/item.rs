@@ -1,5 +1,3 @@
-use m6lexerkit::Token;
-
 use super::{
     ParseErrorReason as R, ParseResult2, Parser, SyntaxNode as SN,
     SyntaxType as ST, TokenTree,
@@ -77,42 +75,20 @@ impl Parser {
 
     fn parse_fn_param(&mut self) -> ParseResult2 {
         let mut subs = vec![];
-        let four = ST::FnParam;
+        let _four = ST::FnParam;
 
         // Check If the FnParam is followed by [PatNoTop] or just [Type]
-        let end = self.tokens.len();
-        for i in self.cursor..end {
-            if self.tokens[i].check_name("id") {
-                if i + 1 >= end {
-                    return Err(
-                        R::Expect { expect: ST::FnParam, four, found: Token::eof() }
-                    );
-                }
-                // Differ Function Declaration and Function Definition.
-                if self.tokens[i+1].check_name("colon") {
-                    subs.push((
-                        ST::FnParamPat,
-                        box SN::T(self.parse_fn_param_pat()?)
-                    ))
-                }
-                else {
-                    subs.push((
-                        ST::Type,
-                        box SN::T(self.parse_ty()?)
-                    ))
-                }
-            }
+        if self.peek1_t().check_value("[") || !self.peek2_t().check_name("colon") {
+            subs.push((
+                ST::Type,
+                box SN::T(self.parse_ty()?)
+            ))
         }
-
-        return Ok(TokenTree::new(subs));
-    }
-
-    fn parse_fn_param_pat(&mut self) -> ParseResult2 {
-        let mut subs = vec![];
-
-        subs.push((ST::PatNoTop, box SN::T(self.parse_pat_no_top()?)));
-        self.expect_eat_colon_t(ST::FnParamPat)?;
-        subs.push((ST::Type, box SN::T(self.parse_ty()?)));
+        else {
+            subs.push((ST::PatNoTop, box SN::T(self.parse_pat_no_top()?)));
+            self.expect_eat_colon_t(ST::FnParamPat)?;
+            subs.push((ST::Type, box SN::T(self.parse_ty()?)));
+        }
 
         return Ok(TokenTree::new(subs));
     }

@@ -7,7 +7,7 @@ use indexmap::indexmap;
 
 use super::{
     aty_int, aty_opaque_struct, aty_str, AMod, APriType, AScope, AType, AVal,
-    AVar, AnalyzeResult2, ConstVal, DiagnosisItem2, DiagnosisType as R, MIR, ASymDef,
+    AVar, AnalyzeResult2, ConstVal, SemanticErrorReason as R, MIR, ASymDef, write_diagnosis,
 };
 use crate::{parser::{SyntaxType as ST, TokenTree}, codegen::is_implicit_sym};
 
@@ -28,7 +28,7 @@ pub(crate) struct SemanticAnalyzerPass2 {
     sc: Vec<usize>,  // Scope Counter,
     cur_fn: Option<Symbol>,
     tt: Rc<TokenTree>,
-    diagnosis: Vec<DiagnosisItem2>,
+    diagnosis: Vec<(R, Span)>,
 }
 
 
@@ -47,8 +47,8 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    fn write_dialogsis(&mut self, dtype: R, span: Span) {
-        self.diagnosis.push(DiagnosisItem2 { dtype, span })
+    fn write_dialogsis(&mut self, r: R, span: Span) {
+        write_diagnosis(&mut self.diagnosis, r, span)
     }
 
     fn cur_scope(&self) -> &AScope {
@@ -129,7 +129,7 @@ impl SemanticAnalyzerPass2 {
         } else {
             // println!("{:#?}", self.frame_stack());
 
-            self.write_dialogsis(R::UnknownSymbolBinding(sym), span);
+            self.write_dialogsis(R::UnknownSymBinding(sym), span);
 
             AVar::undefined()
         }
@@ -168,7 +168,7 @@ impl SemanticAnalyzerPass2 {
 
         } else {
             self.write_dialogsis(
-                R::IncompatiableOpType { op1: symdef1.ty, op2: symdef2.ty },
+                R::IncompatOpType { op1: symdef1.ty, op2: symdef2.ty },
                 span
             );
 
