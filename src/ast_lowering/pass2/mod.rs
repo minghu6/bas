@@ -1,15 +1,19 @@
 use std::rc::Rc;
 
-use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, Symbol, Span, sym2str};
-
 use indexmap::indexmap;
+use m6coll::KVEntry as Entry;
+use m6lexerkit::{str2sym0, sym2str, Span, Symbol};
 
 use super::{
-    aty_int, aty_opaque_struct, aty_str, AMod, APriType, AScope, AType, AVal,
-    AVar, AnalyzeResult2, ConstVal, SemanticErrorReason as R, MIR, ASymDef, write_diagnosis,
+    aty_int, aty_str, write_diagnosis, AMod,
+    AScope, ASymDef, AType, AVal, AVar, AnalyzeResult2, ConstVal,
+    SemanticErrorReason as R, MIR, ESS, aty_arr_str, aty_i32,
 };
-use crate::{parser::{SyntaxType as ST, TokenTree}, codegen::is_implicit_sym};
+use crate::{
+    codegen::is_implicit_sym,
+    name_mangling::mangling,
+    parser::{SyntaxType as ST, TokenTree},
+};
 
 mod expr;
 mod item;
@@ -25,10 +29,10 @@ mod ty;
 ///
 pub(crate) struct SemanticAnalyzerPass2 {
     amod: AMod,
-    sc: Vec<usize>,  // Scope Counter,
+    sc: Vec<usize>, // Scope Counter,
     cur_fn: Option<Symbol>,
     tt: Rc<TokenTree>,
-    diagnosis: Vec<(R, Span)>,
+    cause_lists: Vec<(R, Span)>,
 }
 
 
@@ -40,15 +44,15 @@ impl SemanticAnalyzerPass2 {
 
         Self {
             amod,
-            sc: vec![0],  // 0 is root
+            sc: vec![0], // 0 is root
             cur_fn: None,
             tt,
-            diagnosis: vec![],
+            cause_lists: vec![],
         }
     }
 
     fn write_dialogsis(&mut self, r: R, span: Span) {
-        write_diagnosis(&mut self.diagnosis, r, span)
+        write_diagnosis(&mut self.cause_lists, r, span)
     }
 
     fn cur_scope(&self) -> &AScope {
@@ -97,14 +101,17 @@ impl SemanticAnalyzerPass2 {
             }
         }
 
-        if self.diagnosis.is_empty() {
+        if self.cause_lists.is_empty() {
             Ok(self.amod)
         } else {
-            Err(self.diagnosis)
+            Err(self.cause_lists)
         }
     }
 
-    pub(crate) fn find_explicit_sym_ty_and_tag(&self, sym: &Symbol) -> Option<(usize, AType)> {
+    pub(crate) fn find_explicit_sym_ty_and_tag(
+        &self,
+        sym: &Symbol,
+    ) -> Option<(usize, AType)> {
         let mut scope = self.cur_scope();
 
         loop {
@@ -125,7 +132,10 @@ impl SemanticAnalyzerPass2 {
         span: Span,
     ) -> AVar {
         if let Some((tagid, ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
-            AVar { ty, val: AVal::Var(sym, tagid) }
+            AVar {
+                ty,
+                val: AVal::Var(sym, tagid),
+            }
         } else {
             // println!("{:#?}", self.frame_stack());
 
@@ -149,32 +159,43 @@ impl SemanticAnalyzerPass2 {
         let ty2 = symdef2.ty.clone();
 
         if let Ok(ty) = AType::lift_tys(op, ty1.clone(), ty2.clone()) {
-
             let mut res_sym_def1 = symdef1;
             let mut res_sym_def2 = symdef2;
 
             if ty1 != ty {
-                let val = AVal::TypeCast { name: sym1, ty: ty.clone() };
-                let res_sym1 = self.bind_value(AVar { ty: ty.clone(), val });
-                res_sym_def1 = ASymDef { name: res_sym1, ty  };
-
+                let val = AVal::TypeCast {
+                    name: sym1,
+                    ty: ty.clone(),
+                };
+                let res_sym1 = self.bind_value(AVar {
+                    ty: ty.clone(),
+                    val,
+                });
+                res_sym_def1 = ASymDef { name: res_sym1, ty };
             } else if ty2 != ty {
-                let val = AVal::TypeCast { name: sym2, ty: ty.clone() };
-                let res_sym2 = self.bind_value(AVar { ty: ty.clone(), val });
-                res_sym_def2 = ASymDef { name: res_sym2, ty  };
+                let val = AVal::TypeCast {
+                    name: sym2,
+                    ty: ty.clone(),
+                };
+                let res_sym2 = self.bind_value(AVar {
+                    ty: ty.clone(),
+                    val,
+                });
+                res_sym_def2 = ASymDef { name: res_sym2, ty };
             }
 
             (res_sym_def1, res_sym_def2)
-
         } else {
             self.write_dialogsis(
-                R::IncompatOpType { op1: symdef1.ty, op2: symdef2.ty },
-                span
+                R::IncompatOpType {
+                    op1: symdef1.ty,
+                    op2: symdef2.ty,
+                },
+                span,
             );
 
             (ASymDef::undefined(), ASymDef::undefined())
         }
-
     }
 
     /// For Implicit Symbol
@@ -191,11 +212,10 @@ impl SemanticAnalyzerPass2 {
     /// For Explicit Symbol
     pub(crate) fn assign_var(&mut self, sym: Symbol, var: AVar) -> Symbol {
         if let Some((tagid, _ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
-            self.cur_scope_mut().mirs.push(
-                MIR::assign_var(sym, tagid, var)
-            );
-        }
-        else {
+            self.cur_scope_mut()
+                .mirs
+                .push(MIR::assign_var(sym, tagid, var));
+        } else {
             unreachable!("Compiler Bug Unmatched sym {}", sym2str(sym))
         }
 
@@ -203,8 +223,8 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn create_var(&mut self, sym: Symbol, ty: AType) {
-        let fn_alloc
-            = self.amod.allocs.get_mut(&self.cur_fn.unwrap()).unwrap();
+        let fn_alloc =
+            self.amod.allocs.get_mut(&self.cur_fn.unwrap()).unwrap();
 
         // get last tagid
         let mut tagid = 0;
@@ -223,7 +243,10 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn cast_val(&mut self, varsym: Symbol, ty: AType) -> Symbol {
-        let castval = AVal::TypeCast { name: varsym, ty: ty.clone() };
+        let castval = AVal::TypeCast {
+            name: varsym,
+            ty: ty.clone(),
+        };
 
         self.bind_value(AVar { ty, val: castval })
     }
@@ -234,35 +257,25 @@ impl SemanticAnalyzerPass2 {
         span: Span,
     ) -> Symbol {
         match var.ty {
-            AType::Pri(prity) => {
-                let sym = self.bind_value(var);
-                let arg0 = sym;
-
-                let val = match prity {
-                    APriType::Float(8) => AVal::FnCall {
-                        call_fn: str2sym0("stringify_f64"),
-                        args: vec![arg0],
-                    },
-                    APriType::Str => AVal::FnCall {
-                        call_fn: str2sym0("strdup"),
-                        args: vec![arg0],
-                    },
-                    APriType::Int(_) => AVal::FnCall {
-                        call_fn: str2sym0("stringify_i32"),
-                        args: vec![arg0],
-                    },
-                    _ => todo!(),
-                };
-
-                self.bind_value(AVar { ty: aty_str(), val })
-            }
             AType::PH => str2sym0(""),
             _ => {
-                self.write_dialogsis(
-                    R::UnsupportedStringifyType(var.ty.clone()),
-                    span,
-                );
-                str2sym0("")
+                let sym = self.bind_value(var.clone());
+                let arg0 = sym;
+
+                let strfullname = mangling(str2sym0("str"), &[var.ty.clone()]);
+
+                let ret_var;
+                if let Some(an_ext_dec) = ESS.find_func_by_name(strfullname) {
+                    ret_var = an_ext_dec.fn_call_val(&[arg0]);
+                } else {
+                    self.write_dialogsis(
+                        R::NoMatchedFunc(strfullname, vec![var.ty.clone()]),
+                        span,
+                    );
+                    ret_var = AVar::undefined()
+                }
+
+                self.bind_value(ret_var)
             }
         }
     }
@@ -284,39 +297,29 @@ impl SemanticAnalyzerPass2 {
     pub(super) fn build_const_vec_str(&mut self, strs: Vec<Symbol>) -> Symbol {
         /* Create Vec */
         let cap = self.build_const_usize(strs.len().try_into().unwrap());
-        let sym_vec = self.bind_value(AVar {
-            ty: aty_opaque_struct("Vec"),
-            val: AVal::FnCall {
-                call_fn: str2sym0("vec_new_ptr"),
-                args: vec![cap],
-            },
-        });
+        let fndec = ESS.find_func("new_vec", &[aty_i32()]).unwrap();
+        let sym_vec = self.bind_value(fndec.fn_call_val(&[cap]));
 
         for s in strs.into_iter() {
             let sym_str = if is_implicit_sym(s) {
                 s
-            }
-            else {
-                let var = self.find_explicit_sym_or_diagnose(s, Span::default());
+            } else {
+                let var =
+                    self.find_explicit_sym_or_diagnose(s, Span::default());
 
                 match var.val {
                     AVal::Var(sym, _) => {
                         self.bind_value(var);
                         sym
-                    },
+                    }
                     _ => {
                         return str2sym0("");
                     }
                 }
             };
 
-            self.bind_value(AVar {
-                ty: aty_int(-4),
-                val: AVal::FnCall {
-                    call_fn: str2sym0("vec_push_ptr"),
-                    args: vec![sym_vec, sym_str],
-                },
-            });
+            let fndec = ESS.find_func("push", &[aty_arr_str(), aty_str()]).unwrap();
+            self.bind_value(fndec.fn_call_val(&[sym_vec, sym_str]));
         }
 
         sym_vec

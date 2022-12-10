@@ -18,3 +18,5 @@ mod ast_lowering;
 mod codegen;
 pub mod shell;
 pub(crate) mod aux;
+pub(crate) mod core;
+pub(crate) mod name_mangling;

@@ -34,8 +34,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
             AVal::BlockExpr(blk_idx) => self.translate_block(blk_idx),
             AVal::FnParam(idx) => self.translate_fn_param(idx),
-            AVal::FnCall { call_fn, args } => {
-                self.translate_fn_call(call_fn, args)
+            AVal::FnCall { call_fn, args, sign_name } => {
+                self.translate_fn_call(sign_name, args)
             }
             AVal::BOpExpr { op, operands } => {
                 self.translate_bop_expr(op, operands)
@@ -50,7 +50,7 @@ impl<'ctx> CodeGen<'ctx> {
                 res
             },
             AVal::TypeCast { name, ty } => self.translate_type_cast(name, ty),
-            AVal::Var(sym, tagid) => self.translate_var(sym, tagid),
+            AVal::Var(sym, tagid) => self.translate_local_var(sym, tagid),
             AVal::Assign(sym, tagid, valsym) => {
                 let bv = self.find_sym(valsym).unwrap();
                 self.assign_var((sym, tagid), bv);
@@ -60,7 +60,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn translate_var(&self, sym: Symbol, tagid: usize) -> BasicValueEnum<'ctx> {
+    fn translate_local_var(&self, sym: Symbol, tagid: usize) -> BasicValueEnum<'ctx> {
         let ptr = self.fn_alloc.get(&(sym, tagid)).unwrap();
         self.builder.build_load(*ptr, "")
     }

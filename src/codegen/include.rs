@@ -45,6 +45,9 @@ impl<'ctx> CodeGen<'ctx> {
             vec_set_ptr(vec, i32, ptr) -> ptr;
             vec_insert_ptr(vec, i32, ptr) -> ptr;
 
+            vec_len(vec) -> i32;
+            vec_cap(vec) -> i32;
+
             /* stringify */
             stringify_i32(i32) -> i8ptr;
             stringify_f64(f64) -> i8ptr;

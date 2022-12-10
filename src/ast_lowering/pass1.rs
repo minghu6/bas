@@ -7,7 +7,7 @@ use super::{
     SemanticErrorReason as R, analyze_ty, write_diagnosis,
 };
 use crate::{
-    ast_lowering::analyze_pat_no_top,
+    ast_lowering::{analyze_pat_no_top, get_fullname_by_fn_header},
     parser::{SyntaxType as ST, TokenTree},
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub(crate) struct SemanticAnalyzerPass1 {
     amod: AMod,
     tt: Rc<TokenTree>,
-    diagnosis: Vec<(R, Span)>,
+    cause_lists: Vec<(R, Span)>,
 }
 
 impl SemanticAnalyzerPass1 {
@@ -23,7 +23,7 @@ impl SemanticAnalyzerPass1 {
         Self {
             amod,
             tt,
-            diagnosis: vec![],
+            cause_lists: vec![],
         }
     }
 
@@ -34,10 +34,10 @@ impl SemanticAnalyzerPass1 {
             }
         }
 
-        if self.diagnosis.is_empty() {
+        if self.cause_lists.is_empty() {
             Ok(self.amod)
         } else {
-            Err(self.diagnosis)
+            Err(self.cause_lists)
         }
     }
 
@@ -54,24 +54,20 @@ impl SemanticAnalyzerPass1 {
         let mut sns = tt.subs.iter().peekable();
 
         let idt = *sns.next().unwrap().1.as_tok();
-        let fn_name = idt.value;
+        let fn_base_name= idt.value;
+        debug_assert_eq!(sns.peek().unwrap().0, ST::FnParams);
+        let params = self.analyze_fn_params(sns.next().unwrap().1.as_tt());
+        let fn_full_name = get_fullname_by_fn_header(fn_base_name, &params);
 
-        if let Some(_afn) = self.amod.afns.get(&fn_name) {
-            write_diagnosis(&mut self.diagnosis,
+        if let Some(_afn) = self.amod.afns.get(&fn_full_name) {
+            write_diagnosis(&mut self.cause_lists,
                 R::DupItemDef {
-                    name: fn_name,
-                    prev: fn_name.1,
+                    name: fn_full_name,
+                    prev: fn_full_name.1,
                 },
                 idt.span(),
             );
             return;
-        }
-
-        let params;
-        if !sns.is_empty() && sns.peek().unwrap().0 == ST::FnParams {
-            params = self.analyze_fn_params(sns.next().unwrap().1.as_tt());
-        } else {
-            params = vec![];
         }
 
         let ret;
@@ -83,12 +79,12 @@ impl SemanticAnalyzerPass1 {
 
         let afn = AFnDec {
             // body_idx: None,
-            name: fn_name,
+            name: fn_full_name,
             params,
             ret,
         };
 
-        self.amod.afns.insert(fn_name, afn);
+        self.amod.afns.insert(fn_full_name, afn);
     }
 
     pub(crate) fn analyze_fn_params(
@@ -105,7 +101,7 @@ impl SemanticAnalyzerPass1 {
 
             if *param_ty == ST::id {
                 write_diagnosis(
-                    &mut self.diagnosis,
+                    &mut self.cause_lists,
                     R::LackFormalParam,
                     param_sn.as_tok().span(),
                 );
@@ -131,18 +127,6 @@ impl SemanticAnalyzerPass1 {
     }
 
     pub(crate) fn analyze_ty(&mut self, tt: &TokenTree) -> AType {
-        match analyze_ty(tt) {
-            Ok(aty) => {
-                aty
-            },
-            Err(span) => {
-                write_diagnosis(
-                    &mut self.diagnosis,
-                    R::UnkonwnType,
-                    span,
-                );
-                AType::PH
-            },
-        }
+        analyze_ty(&mut self.cause_lists, tt)
     }
 }

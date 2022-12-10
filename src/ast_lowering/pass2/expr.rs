@@ -3,7 +3,8 @@ use m6lexerkit::{str2sym0, sym2str, Symbol};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
-use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef};
+use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef, ESS, aty_arr_str};
+use crate::name_mangling::mangling;
 use crate::{
     ast_lowering::{
         APriType, AType, AVal, AVar, ConstVal, SemanticErrorReason as R,
@@ -15,110 +16,16 @@ use crate::{
 
 impl SemanticAnalyzerPass2 {
     pub(crate) fn analyze_expr(&mut self, tt: &TokenTree) -> AVar {
-        let mut sns = tt.subs.iter().peekable();
+        if tt[0].0 == ST::OpExpr {
+            return self.analyze_bop_expr(tt);
+        }
 
-        if sns.peek().unwrap().0 == ST::OpExpr {
-            let tt1 = sns.next().unwrap().1.as_tt();
-            let (bopty, bopsn) = sns.next().unwrap();
-            let bop_tok = bopsn.as_tok();
-            let span = bop_tok.span();
-            let tt2 = sns.next().unwrap().1.as_tt();
-
-            /* EXCLUDE ASSIGN CASE */
-            if *bopty == ST::assign {
-                // println!("tt1: {:#?}", tt.subs[0]);
-                let var = self.analyze_path_expr(tt1.subs[0].1.as_tt());
-
-                let value = self.analyze_expr(tt2);
-
-                let valty = value.ty.clone();
-                let mut valsym = self.bind_value(value);
-
-                if var.ty != valty {
-                    if let Ok(_) = valty.try_cast(&var.ty) {
-                        valsym = self.cast_val(valsym, var.ty);
-                    }
-                    else {
-                        self.write_dialogsis(R::CantCastType(valty.clone(), var.ty), span);
-                    }
-                }
-
-                let (name, tagid) = var.val.as_var();
-
-                return AVar {
-                    ty: valty,
-                    val: AVal::Assign(name, tagid, valsym)
-                }
-            }
-
-            let var1 = self.analyze_expr(tt1);
-            let sym1 = self.bind_value(var1.clone());
-            let symdef1 = ASymDef::new(sym1, var1.ty.clone());
-
-            /* TODO: Short Circuit Evaluation */
-            if *bopty == ST::and {
-                // if var1.val eq 0 { 0 } else { analyze_var2 }
-                // if var1.val { 0 } else { analyze_var2 }
-
-                let ifblk_idx = self.push_single_value_scope(AVar {
-                    ty: aty_bool(),
-                    val: AVal::ConstAlias(ConstVal::Bool(false)),
-                });
-
-                let var2 = self.analyze_expr(tt2);
-                let elseblk_idx = self.push_single_value_scope(var2);
-
-                let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
-
-                return AVar {
-                    ty: aty_bool(),
-                    val: ifblk,
-                };
-            }
-
-            if *bopty == ST::or {
-                // if var1.val ne 0 { 1 } else { analyze_var2 }
-                // or if var1.val { analyze_var2 } else { 1 }
-
-                let var2 = self.analyze_expr(tt2);
-                let ifblk_idx = self.push_single_value_scope(var2);
-
-                let elseblk_idx = self.push_single_value_scope(AVar {
-                    ty: aty_bool(),
-                    val: AVal::ConstAlias(ConstVal::Bool(true)),
-                });
-
-                let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
-
-                return AVar {
-                    ty: aty_bool(),
-                    val: ifblk,
-                };
-            }
-
-            let var2 = self.analyze_expr(tt2);
-            let sym2 = self.bind_value(var2.clone());
-            let symdef2 = ASymDef::new(sym2, var2.ty.clone());
-
-            let (res_symdef1, res_symdef2) =
-                self.lift_tys_or_diagnose(*bopty, symdef1, symdef2, span);
-
-            let var1_sym = res_symdef1.name;
-            let var2_sym = res_symdef2.name;
-
-            let retval = AVal::BOpExpr {
-                op: bopty.clone(),
-                operands: vec![var1_sym, var2_sym],
-            };
-
-            return AVar {
-                ty: res_symdef1.ty.clone(),
-                val: retval,
-            };
+        if tt[0].0 == ST::PathExpr && tt.len() > 1 && tt[1].0 == ST::GroupedExpr {
+            return self.analyze_funcall_expr(tt[0].1.as_tt(), tt[1].1.as_tt());
         }
 
         // Atom Expr
-        let (ty, sn) = sns.next().unwrap();
+        let (ty, sn) = &tt[0];
         let paren_tt = tt;
         let tt = sn.as_tt();
 
@@ -128,7 +35,7 @@ impl SemanticAnalyzerPass2 {
             ST::BreakExpr => self.analyze_break_expr(tt),
             ST::ContinueExpr => self.analyze_continue_expr(tt),
 
-            ST::GroupedExpr => self.analyze_expr(&tt.subs[0].1.as_tt()),
+            ST::GroupedExpr => self.analyze_expr(&tt[0].1.as_tt()),
             ST::LitExpr => self.analyze_lit_expr(tt),
             ST::PathExpr => self.analyze_path_expr(tt),
             ST::ReturnExpr => self.analyze_return_expr(tt),
@@ -137,6 +44,146 @@ impl SemanticAnalyzerPass2 {
 
             _ => unimplemented!("{:#?}", paren_tt),
         }
+    }
+
+    pub(crate) fn analyze_funcall_expr(&mut self, path: &TokenTree, grouped: &TokenTree) -> AVar {
+        /* get fn path name */
+        let name_tok = path[0].1.as_tt()[0].1.as_tok();
+        let fn_params_tt = grouped[0].1.as_tt();
+
+        let mut param_syms = vec![];
+        let mut param_tys = vec![];
+
+        for (ty, sn) in fn_params_tt.subs.iter() {
+            debug_assert_eq!(*ty, ST::PathExpr);
+            let param_var = self.analyze_path_expr(sn.as_tt());
+            let param_sym = self.bind_value(param_var.clone());
+
+            param_syms.push(param_sym);
+            param_tys.push(param_var.ty);
+        }
+
+        let opname = name_tok.value;
+
+        /* name mangling */
+        let fullname = mangling(opname, &param_tys);
+
+        if let Some(afndef) = self.amod.in_mod_find_funsym(fullname) {
+            AVar::efn_call(&afndef.as_ext_fn_dec(), param_syms)
+        }
+        else if let Some(extdec) = ESS.find_func_by_name(fullname) {
+            AVar::efn_call(extdec, param_syms)
+        }
+        else {
+            self.write_dialogsis(
+                R::NoMatchedFunc(opname, param_tys),
+                name_tok.span
+            );
+
+            AVar::undefined()
+        }
+    }
+
+    pub(crate) fn analyze_bop_expr(&mut self, tt: &TokenTree) -> AVar {
+        let mut sns = tt.subs.iter().peekable();
+
+        let tt1 = sns.next().unwrap().1.as_tt();
+        let (bopty, bopsn) = sns.next().unwrap();
+        let bop_tok = bopsn.as_tok();
+        let span = bop_tok.span();
+        let tt2 = sns.next().unwrap().1.as_tt();
+
+        /* EXCLUDE ASSIGN CASE */
+        if *bopty == ST::assign {
+            // println!("tt1: {:#?}", tt.subs[0]);
+            let var = self.analyze_path_expr(tt1.subs[0].1.as_tt());
+
+            let value = self.analyze_expr(tt2);
+
+            let valty = value.ty.clone();
+            let mut valsym = self.bind_value(value);
+
+            if var.ty != valty {
+                if let Ok(_) = valty.try_cast(&var.ty) {
+                    valsym = self.cast_val(valsym, var.ty);
+                }
+                else {
+                    self.write_dialogsis(R::CantCastType(valty.clone(), var.ty), span);
+                }
+            }
+
+            let (name, tagid) = var.val.as_var();
+
+            return AVar {
+                ty: valty,
+                val: AVal::Assign(name, tagid, valsym)
+            }
+        }
+
+        let var1 = self.analyze_expr(tt1);
+        let sym1 = self.bind_value(var1.clone());
+        let symdef1 = ASymDef::new(sym1, var1.ty.clone());
+
+        /* TODO: Short Circuit Evaluation */
+        if *bopty == ST::and {
+            // if var1.val eq 0 { 0 } else { analyze_var2 }
+            // if var1.val { 0 } else { analyze_var2 }
+
+            let ifblk_idx = self.push_single_value_scope(AVar {
+                ty: aty_bool(),
+                val: AVal::ConstAlias(ConstVal::Bool(false)),
+            });
+
+            let var2 = self.analyze_expr(tt2);
+            let elseblk_idx = self.push_single_value_scope(var2);
+
+            let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+
+            return AVar {
+                ty: aty_bool(),
+                val: ifblk,
+            };
+        }
+
+        if *bopty == ST::or {
+            // if var1.val ne 0 { 1 } else { analyze_var2 }
+            // or if var1.val { analyze_var2 } else { 1 }
+
+            let var2 = self.analyze_expr(tt2);
+            let ifblk_idx = self.push_single_value_scope(var2);
+
+            let elseblk_idx = self.push_single_value_scope(AVar {
+                ty: aty_bool(),
+                val: AVal::ConstAlias(ConstVal::Bool(true)),
+            });
+
+            let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+
+            return AVar {
+                ty: aty_bool(),
+                val: ifblk,
+            };
+        }
+
+        let var2 = self.analyze_expr(tt2);
+        let sym2 = self.bind_value(var2.clone());
+        let symdef2 = ASymDef::new(sym2, var2.ty.clone());
+
+        let (res_symdef1, res_symdef2) =
+            self.lift_tys_or_diagnose(*bopty, symdef1, symdef2, span);
+
+        let var1_sym = res_symdef1.name;
+        let var2_sym = res_symdef2.name;
+
+        let retval = AVal::BOpExpr {
+            op: bopty.clone(),
+            operands: vec![var1_sym, var2_sym],
+        };
+
+        return AVar {
+            ty: res_symdef1.ty.clone(),
+            val: retval,
+        };
     }
 
     pub(crate) fn analyze_lit_expr(&mut self, tt: &TokenTree) -> AVar {
@@ -336,28 +383,25 @@ impl SemanticAnalyzerPass2 {
         let arg1 = self.build_const_vec_str(sym_syms);
         let arg2 = self.build_const_vec_str(string_syms);
 
-        let val = AVal::FnCall {
-            call_fn: str2sym0("cmd_symbols_replace"),
-            args: vec![arg0, arg1, arg2],
-        };
+        let cmd_fndec = ESS.find_func("cmd_symbols_replace", &[
+            aty_str(),
+            aty_arr_str(),
+            aty_arr_str()
+        ]).unwrap();
 
-        let cmd_sym = self.bind_value(AVar { ty: aty_str(), val });
+        let cmd_sym = self.bind_value(cmd_fndec.fn_call_val(&[arg0, arg1, arg2]));
 
-        let val = AVal::FnCall {
-            call_fn: str2sym0("exec"),
-            args: vec![cmd_sym],
-        };
+        let exec_fndec = ESS.find_func("exec", &[
+            aty_str(),
+        ]).unwrap();
+
+        let exec_res = self.bind_value(exec_fndec.fn_call_val(&[cmd_sym]));
+        let ctlstr = self.build_const_str(str2sym0("%s\n"));
 
         // print stdout
-        let ctlstr = self.build_const_str(str2sym0("%s\n"));
-        let exec_res = self.bind_value(AVar { ty: aty_str(), val });
+        let printf_fndec = ESS.find_unique_func("printf").unwrap();
 
-        let val = AVal::FnCall {
-            call_fn: str2sym0("printf"),
-            args: vec![ctlstr, exec_res],
-        };
-
-        AVar { ty: aty_str(), val }
+        printf_fndec.fn_call_val(&[ctlstr, exec_res])
     }
 
     pub(crate) fn analyze_if_expr(&mut self, tt: &TokenTree) -> AVar {

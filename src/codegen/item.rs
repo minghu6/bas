@@ -50,6 +50,7 @@ impl<'ctx> CodeGen<'ctx> {
             .add_function(&sym2str(afndec.name), fn_t, None);
     }
 
+    /// Name is sign name
     pub(super) fn gen_fn_body(&mut self, name: Symbol, scope_idx: usize) {
         let module = &self.vmmod.module;
         let ctx = get_ctx();
@@ -70,6 +71,14 @@ impl<'ctx> CodeGen<'ctx> {
                 &format!("{:#?}#{}", sym, tagid)
             );
             self.fn_alloc.insert((*sym, *tagid), var);
+        }
+
+        // push into fn params
+        if let Some(afndec) = self.amod.in_mod_find_funsym(name) {
+
+        }
+        else {
+            unreachable!("{}", sym2str(name))
         }
 
         // set terminator

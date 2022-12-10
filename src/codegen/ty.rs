@@ -35,7 +35,9 @@ impl<'ctx> CodeGen<'ctx> {
                     .ptr_type(AddressSpace::Generic)
                     .into(),
             },
-            AType::Arr(_) => todo!(),
+            AType::Arr(ty, d) => {
+                self.aty_arr_as_ret_type(ty, d)
+            },
             AType::AA(_) => todo!(),
             AType::Void => void_t.into(),
             AType::PH => unreachable!(),
@@ -46,8 +48,7 @@ impl<'ctx> CodeGen<'ctx> {
         load_vm_common_ty!(get_ctx());
 
         match aty {
-            AType::Pri(_) => self.gen_aty_as_ret_type(aty).try_into().unwrap(),
-            AType::Arr(_) => todo!(),
+            AType::Pri(_) | AType::Arr(..) => self.gen_aty_as_ret_type(aty).try_into().unwrap(),
             AType::AA(_) => todo!(),
             _ => unreachable!("{:#?}", aty),
         }

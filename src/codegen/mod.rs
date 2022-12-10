@@ -57,6 +57,8 @@ pub(crate) struct CodeGen<'ctx> {
     config: CompilerConfig,
     blks: Vec<LogicBlock<'ctx>>, // Scope - Basic Block Bindings
     fn_alloc: IndexMap<(Symbol, usize), PointerValue<'ctx>>,
+    fn_params: IndexMap<Symbol, BasicValueEnum<'ctx>>,
+
     fpm: PassManager<FunctionValue<'ctx>>,
     sc: Vec<usize>,
 
@@ -75,7 +77,7 @@ impl<'ctx> CodeGen<'ctx> {
             paren: ascope.paren,
             bbs: vec![],
             is_ret: false,  // Be Unkonwn yet
-            implicit_bindings: IndexMap::with_capacity(
+            local_bindings: IndexMap::with_capacity(
                 ascope.implicit_bindings.len(),
             ),
         }).collect();
@@ -127,6 +129,7 @@ impl<'ctx> CodeGen<'ctx> {
             config,
             blks,
             fn_alloc: indexmap! {},
+            fn_params: indexmap! {},
             fpm,
             sc: vec![0],
             phi_ret: vec![],
@@ -256,7 +259,7 @@ impl<'ctx> CodeGen<'ctx> {
 pub(crate) struct LogicBlock<'ctx> {
     pub(crate) paren: Option<usize>,
     pub(crate) bbs: Vec<BasicBlock<'ctx>>,
-    pub(crate) implicit_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
+    pub(crate) local_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
     pub(crate) is_ret: bool
 }
 
@@ -269,8 +272,7 @@ impl<'ctx> LogicBlock<'ctx> {
         &self,
         q: Symbol,
     ) -> Option<BasicValueEnum<'ctx>> {
-        debug_assert!(is_implicit_sym(q), "Found {:?}", q);
-        self.implicit_bindings.get(&q).cloned()
+        self.local_bindings.get(&q).cloned()
     }
 
     pub(crate) fn in_scope_get_fnval(
@@ -284,8 +286,7 @@ impl<'ctx> LogicBlock<'ctx> {
     }
 
     pub(crate) fn bind_val_sym(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
-        debug_assert!(is_implicit_sym(sym), "Found {:?}", sym);
-        self.implicit_bindings.insert(sym, bv);
+        self.local_bindings.insert(sym, bv);
     }
 
 }
@@ -351,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_codegen() -> Result<(), Box<dyn std::error::Error>> {
-        let path = PathBuf::from("./examples/exp0.bath");
+        let path = PathBuf::from("./examples/exp1.bath");
         let src = SrcFileInfo::new(&path).unwrap();
 
         let tokens = tokenize(&src)?;
