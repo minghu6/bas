@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use indexmap::indexmap;
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, sym2str, Span, Symbol};
+use m6lexerkit::{str2sym, sym2str, Span, Symbol};
 
 use super::{
     aty_int, aty_str, write_diagnosis, AMod,
@@ -257,12 +257,12 @@ impl SemanticAnalyzerPass2 {
         span: Span,
     ) -> Symbol {
         match var.ty {
-            AType::PH => str2sym0(""),
+            AType::PH => str2sym(""),
             _ => {
                 let sym = self.bind_value(var.clone());
                 let arg0 = sym;
 
-                let strfullname = mangling(str2sym0("str"), &[var.ty.clone()]);
+                let strfullname = mangling(str2sym("str"), &[var.ty.clone()]);
 
                 let ret_var;
                 if let Some(an_ext_dec) = ESS.find_func_by_name(strfullname) {
@@ -313,7 +313,7 @@ impl SemanticAnalyzerPass2 {
                         sym
                     }
                     _ => {
-                        return str2sym0("");
+                        return str2sym("");
                     }
                 }
             };

@@ -27,6 +27,9 @@ testcodegen:
 testcompile:
 	cargo test -- --nocapture test_compile
 
+testboot:
+	RUST_BACKTRACE=1 cargo test -- --nocapture test_boot
+
 getlib:
 	@ cd clib && make libbas.a && mv libbas.a ../
 

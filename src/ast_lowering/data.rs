@@ -6,12 +6,12 @@ use inkwellkit::{
     types::{FloatType, IntType},
 };
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, sym2str, Symbol, lazy_static::lazy_static};
+use m6lexerkit::{str2sym, sym2str, Symbol, lazy_static::lazy_static, Token};
 
 use super::MIR;
 use crate::{
     name_mangling::mangling,
-    parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree}, core::load_core_exp,
+    parser::SyntaxType as ST, core::load_core_exp,
 };
 
 
@@ -87,7 +87,7 @@ pub enum APriType {
 
 
 pub struct AFnDec {
-    // idt: Token,  // Identifier Token
+    pub idt: Token,  // Identifier Token
     // body_idx: Option<usize>,
     pub name: Symbol,
     pub params: Vec<AParamPat>,
@@ -185,7 +185,7 @@ impl ExtSymSet {
         name: &str,
         atys: &[AType],
     ) -> Option<&AnExtFnDec> {
-        let fullname = mangling(str2sym0(name), atys);
+        let fullname = mangling(str2sym(name), atys);
 
         self.find_func_by_name(fullname)
     }
@@ -208,7 +208,7 @@ impl ExtSymSet {
         name: &str,
     ) -> Result<&AnExtFnDec, Vec<&AnExtFnDec>> {
 
-        let fullname = str2sym0(name);
+        let fullname = str2sym(name);
         let mut res = vec![];
 
         for amod in self.mods.iter() {
@@ -302,12 +302,21 @@ impl AMod {
     ) -> Option<&AFnDec> {
         self.afns.get(&fullname)
     }
+
+    pub(crate) fn export(&self) -> AModExp {
+        let afns = self.afns
+            .iter()
+            .map(|(k, v)| (*k, v.as_ext_fn_dec()))
+            .collect();
+
+        AModExp { afns }
+    }
 }
 
 
 impl AScope {
     pub(crate) fn tmp_name(&self) -> Symbol {
-        str2sym0(&format!("!__tmp_{}", self.implicit_bindings.len()))
+        str2sym(&format!("!__tmp_{}", self.implicit_bindings.len()))
     }
 
     pub(crate) fn ret(&self) -> AVar {
@@ -414,7 +423,7 @@ impl ASymDef {
 
     pub(crate) fn undefined() -> Self {
         Self {
-            name: str2sym0(""),
+            name: str2sym(""),
             ty: AType::PH,
         }
     }
@@ -568,8 +577,9 @@ pub(crate) const fn aty_u8() -> AType {
 pub(crate) const fn aty_f64() -> AType {
     AType::Pri(APriType::Float(8))
 }
+#[allow(unused)]
 pub(crate) fn aty_opaque_struct(s: &str) -> AType {
-    AType::Pri(APriType::OpaqueStruct(str2sym0(s)))
+    AType::Pri(APriType::OpaqueStruct(str2sym(s)))
 }
 pub(crate) const fn aty_arr_int() -> AType {
     AType::Arr(APriType::Int(-4), 1)

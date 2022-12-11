@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use m6lexerkit::{Symbol, sym2str, str2sym0};
+use m6lexerkit::{Symbol, sym2str, str2sym};
 
 use crate::ast_lowering::{AType, APriType};
 
@@ -123,7 +123,7 @@ impl APriType {
                 },
                 '{' => {
                     if let Some(delidx) = s.find('}') {
-                        return Some(APriType::OpaqueStruct(str2sym0(&s[1..delidx])))
+                        return Some(APriType::OpaqueStruct(str2sym(&s[1..delidx])))
                     }
                 },
                 _ => ()
@@ -148,7 +148,7 @@ pub fn mangling(name: Symbol, atys: &[AType]) -> Symbol {
     .map(|aty| aty.ident_name())
     .join("#");
 
-    str2sym0(&format!("{}@{}", sym2str(name), param_postfix))
+    str2sym(&format!("{}@{}", sym2str(name), param_postfix))
 }
 
 #[allow(unused)]
@@ -160,7 +160,7 @@ pub fn unmangling(mangling_name: Symbol) -> Option<(Symbol, Vec<AType>)> {
     let split: Vec<&str> = s.split('@').collect();
 
     if split.len() == 2 {
-        let base = str2sym0(split[0]);
+        let base = str2sym(split[0]);
         let postfix = split[1];
 
         let tys: Vec<Option<AType>> = postfix

@@ -57,7 +57,7 @@ pub(crate) struct CodeGen<'ctx> {
     config: CompilerConfig,
     blks: Vec<LogicBlock<'ctx>>, // Scope - Basic Block Bindings
     fn_alloc: IndexMap<(Symbol, usize), PointerValue<'ctx>>,
-    fn_params: IndexMap<Symbol, BasicValueEnum<'ctx>>,
+    // fn_params: IndexMap<Symbol, BasicValueEnum<'ctx>>,
 
     fpm: PassManager<FunctionValue<'ctx>>,
     sc: Vec<usize>,
@@ -129,7 +129,7 @@ impl<'ctx> CodeGen<'ctx> {
             config,
             blks,
             fn_alloc: indexmap! {},
-            fn_params: indexmap! {},
+            // fn_params: indexmap! {},
             fpm,
             sc: vec![0],
             phi_ret: vec![],

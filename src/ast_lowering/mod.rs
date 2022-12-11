@@ -1,24 +1,20 @@
+pub mod data;
 mod pass1;
 mod pass2;
-pub mod data;
 
-use std::cmp::{max, min};
+
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use indexmap::{indexmap, IndexMap};
-use inkwellkit::get_ctx;
-use inkwellkit::types::{FloatType, IntType};
 use itertools::Itertools;
-use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym0, sym2str, Span, SrcFileInfo, Symbol, Token};
+use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
 use pass1::SemanticAnalyzerPass1;
 
+pub use self::data::*;
 use self::pass2::SemanticAnalyzerPass2;
 use crate::name_mangling::mangling;
 use crate::parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree};
 use crate::{opt_osstr_to_str, ref_source};
-pub use self::data::*;
 
 
 
@@ -203,7 +199,7 @@ impl SN {
 
 fn _semantic_analyze(tt: TokenTree, src: &SrcFileInfo) -> AnalyzeResult2 {
     let amod =
-        AMod::init(str2sym0(opt_osstr_to_str!(&src.get_path().file_stem())));
+        AMod::init(str2sym(opt_osstr_to_str!(&src.get_path().file_stem())));
     let tt = Rc::new(tt);
 
     let pass1 = SemanticAnalyzerPass1::new(amod, tt.clone());

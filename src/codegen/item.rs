@@ -74,7 +74,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         // push into fn params
-        if let Some(afndec) = self.amod.in_mod_find_funsym(name) {
+        if let Some(_afndec) = self.amod.in_mod_find_funsym(name) {
 
         }
         else {

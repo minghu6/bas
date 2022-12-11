@@ -10,6 +10,8 @@ mod item;
 mod pat;
 mod stmt;
 mod ty;
+mod attr;
+
 
 gen_syntax_enum! [ pub SyntaxType |
     Item,
@@ -108,15 +110,17 @@ gen_syntax_enum! [ pub SyntaxType |
     bxor_assign,
     lshf_assign,
     rshf_assign,
+    attr,
     eof
 ];
 
+
 pub(crate) struct TokenTree {
-    pub(crate) subs: Vec<(SyntaxType, Box<SyntaxNode>)>,
+    pub(crate) subs: Vec<(SyntaxType, SyntaxNode)>,
 }
 
 impl TokenTree {
-    pub(super) fn new(subs: Vec<(SyntaxType, Box<SyntaxNode>)>) -> Self {
+    pub(super) fn new(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
         Self { subs }
     }
 
@@ -124,11 +128,11 @@ impl TokenTree {
         self.subs.len()
     }
 
-    pub(super) fn last(&self) -> &(SyntaxType, Box<SyntaxNode>) {
+    pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
         self.last_nth(1)
     }
 
-    pub(super) fn last_nth(&self, last_idx: usize) -> &(SyntaxType, Box<SyntaxNode>) {
+    pub(super) fn last_nth(&self, last_idx: usize) -> &(SyntaxType, SyntaxNode) {
         &self.subs[self.len() - last_idx]
     }
 }
@@ -140,7 +144,7 @@ impl std::fmt::Debug for TokenTree {
         for (ty, sn) in self.subs.iter() {
             dbs = dbs.field(ty);
 
-            match &**sn {
+            match &*sn {
                 SyntaxNode::T(tt) => dbs = dbs.field(&tt),
                 SyntaxNode::E(tok) => dbs = dbs.field(&tok),
             }
@@ -150,7 +154,7 @@ impl std::fmt::Debug for TokenTree {
     }
 }
 
-impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> Index<I> for TokenTree {
+impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> Index<I> for TokenTree {
     type Output = I::Output;
 
     fn index(&self, index: I) -> &Self::Output {
@@ -158,7 +162,7 @@ impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> Index<I> for TokenTree {
     }
 }
 
-impl<I: SliceIndex<[(SyntaxType, Box<SyntaxNode>)]>> IndexMut<I> for TokenTree {
+impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> IndexMut<I> for TokenTree {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         IndexMut::index_mut(&mut self.subs, index)
     }
@@ -172,7 +176,7 @@ pub(crate) enum SyntaxNode {
 }
 
 impl SyntaxNode {
-    // pub(super) fn from_t(subs: Vec<(SyntaxType, Box<SyntaxNode>)>) -> Self {
+    // pub(super) fn from_t(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
     //     Self::T(TokenTree { subs })
     // }
 }
@@ -218,7 +222,11 @@ impl std::fmt::Display for ParseError {
 
 impl Debug for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f)?;
+
         writeln!(f, "{:?}", self.reason)?;
+
         let found_tok = self.reason.token();
 
         ref_source!(found_tok.span, "^", f, self.src);
@@ -258,7 +266,7 @@ impl Debug for ParseErrorReason {
                 writeln!(f, "Expect an {expect} when parsing {four}, however found {found:?}")
             }
             Self::Unrecognized { four, found } => {
-                writeln!(f, "Unrecognized token {found} when parsing {four:?}")
+                writeln!(f, "Unrecognized token {found:?} when parsing {four}")
             }
         }
     }
@@ -344,7 +352,7 @@ impl Parser {
         while !self.is_end() {
             subs.push((
                 SyntaxType::Item,
-                box SyntaxNode::T(self.parse_item()?),
+                SyntaxNode::T(self.parse_item()?),
             ))
         }
 

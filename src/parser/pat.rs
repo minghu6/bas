@@ -13,7 +13,7 @@ impl Parser {
         let four = ST::PatNoTop;
         let mut subs = vec![];
 
-        subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+        subs.push((ST::id, SN::E(self.expect_eat_id_t(four)?)));
 
         return Ok(TokenTree::new(subs));
     }

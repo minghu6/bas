@@ -1,0 +1,9 @@
+
+@extern
+@no_mangle
+fn printf(str);
+
+@extern
+@no_mangle
+fn len(str) -> int;
+

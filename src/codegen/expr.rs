@@ -34,7 +34,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             AVal::BlockExpr(blk_idx) => self.translate_block(blk_idx),
             AVal::FnParam(idx) => self.translate_fn_param(idx),
-            AVal::FnCall { call_fn, args, sign_name } => {
+            AVal::FnCall { call_fn: _, args, sign_name } => {
                 self.translate_fn_call(sign_name, args)
             }
             AVal::BOpExpr { op, operands } => {

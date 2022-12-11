@@ -1,11 +1,20 @@
 use std::{
-    path::{PathBuf, Path},
-    time::{SystemTime, UNIX_EPOCH}, process::{Command, Stdio}, env, fs
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-use inkwellkit::{config::{EmitType, PrintTy}, targets::{Target, InitializationConfig, TargetMachine, RelocMode, CodeModel, FileType}};
+use inkwellkit::{
+    config::{EmitType, PrintTy},
+    targets::{
+        CodeModel, FileType, InitializationConfig, RelocMode, Target,
+        TargetMachine,
+    },
+};
 
-use super::{CodeGen, CodeGenResult, CodeGenError};
+use super::{CodeGen, CodeGenError, CodeGenResult};
+use crate::env::libbas_o_path;
 
 
 fn unique_suffix() -> String {
@@ -16,22 +25,6 @@ fn unique_suffix() -> String {
         .to_string()
 }
 
-/// BareLang Installed Home
-#[inline]
-pub fn bas_home() -> PathBuf {
-    let bas_home_str
-    = env::var("BAS_HOME").unwrap_or(".".to_string());
-
-    fs::canonicalize(Path::new(
-        &bas_home_str
-    )).unwrap()
-}
-
-/// staticlib
-#[inline]
-pub fn libbas_o_path() -> PathBuf {
-    bas_home().join("libbas.a")
-}
 
 
 impl<'ctx> CodeGen<'ctx> {
@@ -43,8 +36,8 @@ impl<'ctx> CodeGen<'ctx> {
         let filename = src_path.file_name().unwrap().to_str().unwrap();
 
         src_path
-        .with_file_name(filename.to_owned() + "_" + &unique_suffix())
-        .with_extension("o")
+            .with_file_name(filename.to_owned() + "_" + &unique_suffix())
+            .with_extension("o")
     }
 
     pub(crate) fn gen_file(&self) -> CodeGenResult {
@@ -53,7 +46,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_obj()?;
 
                 Ok(())
-            },
+            }
             EmitType::LLVMIR => self.emit_llvmir(),
             _ => todo!(),
         }
@@ -61,7 +54,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn emit_obj(&self) -> CodeGenResult {
         Target::initialize_native(&InitializationConfig::default())
-        .map_err(|s| CodeGenError::new(&s))?;
+            .map_err(|s| CodeGenError::new(&s))?;
 
         let triple = TargetMachine::get_default_triple();
         self.vmmod.module.set_triple(&triple);
@@ -79,7 +72,8 @@ impl<'ctx> CodeGen<'ctx> {
             )
             .unwrap();
 
-        self.vmmod.module
+        self.vmmod
+            .module
             .set_data_layout(&machine.get_target_data().get_data_layout());
 
         let tmp_input = self.tmp_obj_fname();
@@ -99,9 +93,10 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn emit_llvmir(&self) -> CodeGenResult {
         if let PrintTy::File(ref path) = self.config.print_type {
-            self.vmmod.module.print_to_file(path).map_err(|llvmstr| {
-               CodeGenError::from(llvmstr)
-            })
+            self.vmmod
+                .module
+                .print_to_file(path)
+                .map_err(|llvmstr| CodeGenError::from(llvmstr))
         } else {
             Ok(self.vmmod.module.print_to_stderr())
         }
@@ -122,8 +117,6 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn clean_obj(&self, input: &Path) -> CodeGenResult {
         fs::remove_file(input)
-        .or_else(|st| Err(CodeGenError::new(&st.to_string())))
+            .or_else(|st| Err(CodeGenError::new(&st.to_string())))
     }
-
 }
-

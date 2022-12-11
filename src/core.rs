@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use inkwellkit::{get_ctx, types::RetTypeEnum};
 use itertools::Itertools;
-use m6lexerkit::{str2sym0, Symbol};
+use m6lexerkit::{str2sym, Symbol};
 
 use crate::{
     ast_lowering::{
@@ -95,17 +95,17 @@ fn def(
 ) -> AnExtFnDec {
     let tys = params.iter().map(|param| param.1.clone()).collect_vec();
 
-    let namesym = mangling(str2sym0(name), &tys);
+    let namesym = mangling(str2sym(name), &tys);
 
     let params = params
         .iter()
-        .map(|(formal, ty)| (str2sym0(formal), ty.clone()))
+        .map(|(formal, ty)| (str2sym(formal), ty.clone()))
         .collect_vec();
 
     AnExtFnDec {
         name: namesym,
         params,
         ret,
-        sign_name: str2sym0(sign_name),
+        sign_name: str2sym(sign_name),
     }
 }

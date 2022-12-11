@@ -14,8 +14,11 @@ Item:
   | [Function]
   | [CupBoard]
 
+Attrs:
+  | <attr>+
+
 Function:
-  | <fn> <id> <lparen> [FnParams]? <rparen> (<rarrow> [Type])? ([BlockExpr] | <semi>)
+  | [Attrs]? <fn> <id> <lparen> [FnParams]? <rparen> (<rarrow> [Type])? ([BlockExpr] | <semi>)
 
 FnParams:
   | [FnParam]? (<comma> [FnParam])*

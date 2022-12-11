@@ -59,11 +59,11 @@ impl SemanticAnalyzerPass1 {
         let params = self.analyze_fn_params(sns.next().unwrap().1.as_tt());
         let fn_full_name = get_fullname_by_fn_header(fn_base_name, &params);
 
-        if let Some(_afn) = self.amod.afns.get(&fn_full_name) {
+        if let Some(afn) = self.amod.afns.get(&fn_full_name) {
             write_diagnosis(&mut self.cause_lists,
                 R::DupItemDef {
                     name: fn_full_name,
-                    prev: fn_full_name.1,
+                    prev: afn.idt.span,
                 },
                 idt.span(),
             );
@@ -79,6 +79,7 @@ impl SemanticAnalyzerPass1 {
 
         let afn = AFnDec {
             // body_idx: None,
+            idt,
             name: fn_full_name,
             params,
             ret,

@@ -1,5 +1,5 @@
 use m6lexerkit::lazy_static::lazy_static;
-use m6lexerkit::{str2sym0, sym2str, Symbol};
+use m6lexerkit::{sym2str, Symbol, str2sym};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
@@ -277,7 +277,7 @@ impl SemanticAnalyzerPass2 {
         let idtok = tt.subs[0].1.as_tok();
         let id = idtok.value;
 
-        self.find_explicit_sym_or_diagnose(id, id.1)
+        self.find_explicit_sym_or_diagnose(id, idtok.span)
     }
 
     pub(crate) fn analyze_side_effect_expr(&mut self, tt: &TokenTree) -> AVar {
@@ -396,7 +396,7 @@ impl SemanticAnalyzerPass2 {
         ]).unwrap();
 
         let exec_res = self.bind_value(exec_fndec.fn_call_val(&[cmd_sym]));
-        let ctlstr = self.build_const_str(str2sym0("%s\n"));
+        let ctlstr = self.build_const_str(str2sym("%s\n"));
 
         // print stdout
         let printf_fndec = ESS.find_unique_func("printf").unwrap();
@@ -553,5 +553,5 @@ fn extract_symbol(value: Symbol) -> Vec<Symbol> {
         syms.push(s)
     }
 
-    syms.into_iter().map(|s| value.derive(s) ).collect()
+    syms.into_iter().map(|s| str2sym(s) ).collect()
 }

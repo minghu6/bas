@@ -9,6 +9,7 @@ use maplit::hashset;
 
 make_token_matcher_rules! {
     id        => "[[:alpha:]_][[:alnum:]_]*",
+    attr      => r#"@\w+"#,
 
     // Lit
     lit_int => r"[+|-]?(([0-9]+)|(0x[0-9a-f]+))",
@@ -22,7 +23,7 @@ make_token_matcher_rules! {
     // Comment
     sharp_line_comment  => r"#.*",
 
-    // space
+    // White characters
     sp      => "[[:blank:]]+",
     newline => r#"\n\r?"#,
 
@@ -99,7 +100,11 @@ pub(crate) fn tokenize(source: &SrcFileInfo) -> TokenizeResult {
         Ok(toks
             .into_iter()
             .filter(|tok| !BLANK_TOK_SET.contains(&tok.name_string().as_str()))
-            .map(|tok| {
+            .map(|mut tok| {
+                if tok.check_name("attr") {
+                    tok = tok.mapval(&tok.value_string()[1..]);
+                }
+
                 tok.rename_by_value(&KEY_SET)
             })
             // .chain([Token::eof()])

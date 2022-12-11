@@ -32,56 +32,56 @@ impl Parser {
             /* ExprBlk */
             if tok1.check_name("if") {
                 ty = ST::IfExpr;
-                tt = box SN::T(self.parse_if_expr()?);
+                tt = SN::T(self.parse_if_expr()?);
             } else if tok1.check_name("loop") {
                 ty = ST::InfiLoopExpr;
-                tt = box SN::T(self.parse_infi_loop_expr()?);
+                tt = SN::T(self.parse_infi_loop_expr()?);
             } else if tok1.check_name("while") {
-                // item = (ST::InfiLoopExpr, box SN::T(self.parse_infi_loop_expr()?))
+                // item = (ST::InfiLoopExpr, SN::T(self.parse_infi_loop_expr()?))
                 todo!()
             } else if tok1.check_name("for") {
                 todo!()
             } else if tok1.check_name("lparen") {
                 ty = ST::GroupedExpr;
-                tt = box SN::T(self.parse_grouped_expr()?);
+                tt = SN::T(self.parse_grouped_expr()?);
             }
             /* ExprSpan */
             // LitExpr
             else if tok1.check_name("lit_char") {  // u32 in memorry
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_char,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             } else if tok1.check_name("lit_str") {  // char*
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_str,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             } else if tok1.check_name("lit_rawstr") {  // encoded char*
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_rawstr,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             } else if tok1.check_name("lit_int") {  // i32
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_int,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             } else if tok1.check_name("lit_float") {  // f64
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_float,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             } else if tok1.check_name("lit_bool") {  // u8
                 ty = ST::LitExpr;
-                tt = box SN::T(TokenTree::new(vec![(
+                tt = SN::T(TokenTree::new(vec![(
                     ST::lit_bool,
-                    box SN::E(self.unchecked_advance())
+                    SN::E(self.unchecked_advance())
                 )]));
             }
             // PathExpr | SideEffectExpr
@@ -90,26 +90,26 @@ impl Parser {
 
                 if tok2.check_values_in(&["++", "--"]) {
                     ty = ST::SideEffectExpr;
-                    tt = box SN::T(self.parse_side_effect_expr()?);
+                    tt = SN::T(self.parse_side_effect_expr()?);
                 }
                 else {
                     ty = ST::PathExpr;
-                    tt = box SN::T(self.parse_path_expr()?);
+                    tt = SN::T(self.parse_path_expr()?);
                 }
             } else if tok1.check_name("continue") {
                 // ty = ST::ContinueExpr;
-                // tt = box SN::T(self.parse_return_expr()?);
+                // tt = SN::T(self.parse_return_expr()?);
                 todo!()
             } else if tok1.check_name("break") {
                 // ty = ST::BreakExpr;
-                // tt = box SN::T(self.parse_return_expr()?);
+                // tt = SN::T(self.parse_return_expr()?);
                 todo!()
             } else if tok1.check_name("return") {
                 ty = ST::ReturnExpr;
-                tt = box SN::T(self.parse_return_expr()?);
+                tt = SN::T(self.parse_return_expr()?);
             } else if tok1.check_name("cmd") {
                 ty = ST::CmdExpr;
-                tt = box SN::T(self.parse_cmd_expr()?);
+                tt = SN::T(self.parse_cmd_expr()?);
             }
             // Op
             // Precedence 110
@@ -340,7 +340,7 @@ impl Parser {
 
         self.expect_eat_tok1_t(ST::r#loop, four)?;
 
-        subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));
+        subs.push((ST::BlockExpr, SN::T(self.parse_block_expr()?)));
 
         Ok(TokenTree::new(subs))
     }
@@ -350,10 +350,10 @@ impl Parser {
         let mut subs = vec![];
         subs.push((
             ST::r#if,
-            box SN::E(self.expect_eat_tok1_t(ST::r#if, four)?))
+            SN::E(self.expect_eat_tok1_t(ST::r#if, four)?))
         );
-        subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
-        subs.push((ST::BlockExpr, box SN::T(self.parse_block_expr()?)));
+        subs.push((ST::Expr, SN::T(self.parse_expr()?)));
+        subs.push((ST::BlockExpr, SN::T(self.parse_block_expr()?)));
 
         #[cfg(test)]
         {
@@ -368,10 +368,10 @@ impl Parser {
             if lookhead1.check_name("lbrace") {
                 subs.push((
                     ST::BlockExpr,
-                    box SN::T(self.parse_block_expr()?),
+                    SN::T(self.parse_block_expr()?),
                 ));
             } else if lookhead1.check_name("if") {
-                subs.push((ST::IfExpr, box SN::T(self.parse_if_expr()?)));
+                subs.push((ST::IfExpr, SN::T(self.parse_if_expr()?)));
             } else {
                 return Err(R::Unrecognized {
                     four: ST::r#else,
@@ -388,7 +388,7 @@ impl Parser {
         let mut subs = vec![];
 
         self.expect_eat_tok1_t(ST::lbrace, four)?;
-        subs.push((ST::Stmts, box SN::T(self.parse_stmts()?)));
+        subs.push((ST::Stmts, SN::T(self.parse_stmts()?)));
         self.expect_eat_tok1_t(ST::rbrace, four)?;
 
         Ok(TokenTree::new(subs))
@@ -398,13 +398,13 @@ impl Parser {
         let four = ST::PathExpr;
         let mut subs = vec![];
 
-        subs.push((ST::PathExprSeg, box SN::T(self.parse_path_expr_seg()?)));
+        subs.push((ST::PathExprSeg, SN::T(self.parse_path_expr_seg()?)));
 
         while self.peek1_t().check_name("colo2") {
             self.expect_eat_tok1_t(ST::colon2, four)?;
             subs.push((
                 ST::PathExprSeg,
-                box SN::T(self.parse_path_expr_seg()?),
+                SN::T(self.parse_path_expr_seg()?),
             ));
         }
 
@@ -417,7 +417,7 @@ impl Parser {
 
         let tok = self.expect_eat_id_t(four)?;
 
-        subs.push((ST::id, box SN::E(tok)));
+        subs.push((ST::id, SN::E(tok)));
 
         Ok(TokenTree::new(subs))
     }
@@ -427,7 +427,7 @@ impl Parser {
         let mut subs = vec![];
 
         self.expect_eat_tok1_t(ST::lparen, four)?;
-        subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
+        subs.push((ST::Expr, SN::T(self.parse_expr()?)));
         self.expect_eat_tok1_t(ST::rparen, four)?;
 
         Ok(TokenTree::new(subs))
@@ -439,7 +439,7 @@ impl Parser {
 
         self.expect_eat_tok1_t(ST::r#return, four)?;
         if !self.peek1_t().check_names_in(&["semi", "rbrace"]) {
-            subs.push((ST::Expr, box SN::T(self.parse_expr()?)));
+            subs.push((ST::Expr, SN::T(self.parse_expr()?)));
         }
 
         Ok(TokenTree::new(subs))
@@ -452,7 +452,7 @@ impl Parser {
 
         let cmd_tok = self.expect_eat_tok1_t(ST::cmd, four)?;
 
-        subs.push((ST::cmd, box SN::E(cmd_tok)));
+        subs.push((ST::cmd, SN::E(cmd_tok)));
 
         Ok(TokenTree::new(subs))
     }
@@ -464,12 +464,12 @@ impl Parser {
         let mut subs = vec![];
 
         if tok1.check_name("id") {
-            subs.push((ST::id, box SN::E(self.unchecked_advance())));
+            subs.push((ST::id, SN::E(self.unchecked_advance())));
 
             if self.peek1_t().check_name("inc") {
-                subs.push((ST::inc, box SN::E(self.unchecked_advance())));
+                subs.push((ST::inc, SN::E(self.unchecked_advance())));
             } else if self.peek1_t().check_name("dec") {
-                subs.push((ST::dec, box SN::E(self.unchecked_advance())));
+                subs.push((ST::dec, SN::E(self.unchecked_advance())));
             } else {
                 return Err(R::Unrecognized {
                     four,
@@ -477,11 +477,11 @@ impl Parser {
                 });
             }
         } else if tok1.check_name("inc") {
-            subs.push((ST::inc, box SN::E(self.unchecked_advance())));
-            subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+            subs.push((ST::inc, SN::E(self.unchecked_advance())));
+            subs.push((ST::id, SN::E(self.expect_eat_id_t(four)?)));
         } else if tok1.check_name("dec") {
-            subs.push((ST::dec, box SN::E(self.unchecked_advance())));
-            subs.push((ST::id, box SN::E(self.expect_eat_id_t(four)?)));
+            subs.push((ST::dec, SN::E(self.unchecked_advance())));
+            subs.push((ST::id, SN::E(self.expect_eat_id_t(four)?)));
         }
 
         Ok(TokenTree::new(subs))
@@ -489,17 +489,17 @@ impl Parser {
 }
 
 fn map_infix_expr_to_tt(
-    ie: InfixExpr<BopWrapper<(ST, Token)>, (ST, Box<SN>)>,
+    ie: InfixExpr<BopWrapper<(ST, Token)>, (ST, SN)>,
 ) -> TokenTree {
     let mut subs = vec![];
 
     match ie {
         InfixExpr::E(e) => subs.push(e),
         InfixExpr::T { bop, pri1, pri2 } => {
-            subs.push((ST::OpExpr, box SN::T(map_infix_expr_to_tt(*pri1))));
+            subs.push((ST::OpExpr, SN::T(map_infix_expr_to_tt(*pri1))));
             let (bopty, boptt) = bop.unwrap();
-            subs.push((bopty, box SN::E(boptt)));
-            subs.push((ST::OpExpr, box SN::T(map_infix_expr_to_tt(*pri2))));
+            subs.push((bopty, SN::E(boptt)));
+            subs.push((ST::OpExpr, SN::T(map_infix_expr_to_tt(*pri2))));
         }
     }
 
