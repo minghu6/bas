@@ -6,7 +6,7 @@ fn main() -> int {
     let count: int;
 
     count = 4;
-#   let tmp = 2 + 3  * 4 - 2;
+#   let tmp = 2 + 3 * 4 - 2;
 
     loop {
         if count < 10 {

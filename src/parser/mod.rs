@@ -15,6 +15,7 @@ mod attr;
 
 gen_syntax_enum! [ pub SyntaxType |
     Item,
+    Attrs,
     CupBoard,
     Function,
     BlockExpr,
@@ -115,9 +116,11 @@ gen_syntax_enum! [ pub SyntaxType |
 ];
 
 
-pub(crate) struct TokenTree {
+pub struct TokenTree {
     pub(crate) subs: Vec<(SyntaxType, SyntaxNode)>,
 }
+pub use SyntaxType as ST;
+pub(crate) use SyntaxNode as SN;
 
 impl TokenTree {
     pub(super) fn new(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
@@ -128,12 +131,12 @@ impl TokenTree {
         self.subs.len()
     }
 
-    pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
-        self.last_nth(1)
-    }
+    // pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
+    //     self.last_nth(1)
+    // }
 
-    pub(super) fn last_nth(&self, last_idx: usize) -> &(SyntaxType, SyntaxNode) {
-        &self.subs[self.len() - last_idx]
+    pub(super) fn iter(&self) -> impl Iterator<Item=&(ST, SN)> {
+        self.subs.iter()
     }
 }
 
@@ -170,7 +173,7 @@ impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> IndexMut<I> for TokenTree {
 
 
 #[derive(Debug)]
-pub(crate) enum SyntaxNode {
+pub enum SyntaxNode {
     T(TokenTree),
     E(Token),
 }
@@ -362,6 +365,7 @@ impl Parser {
     fn parse(&mut self, srcfile: &SrcFileInfo) -> ParseResult {
         self.parse_()
             .or_else(|reason| Err(reason.emit_error(srcfile.clone())))
+            .and_then(|tt| Ok(tt))
     }
 
     fn expect_eat_id_t(

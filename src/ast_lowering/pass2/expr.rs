@@ -1,14 +1,14 @@
 use m6lexerkit::lazy_static::lazy_static;
-use m6lexerkit::{sym2str, Symbol, str2sym};
+use m6lexerkit::{str2sym, sym2str, Symbol};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
-use crate::ast_lowering::{aty_bool, aty_f64, aty_i32, aty_str, ASymDef, ESS, aty_arr_str};
-use crate::name_mangling::mangling;
 use crate::{
     ast_lowering::{
-        APriType, AType, AVal, AVar, ConstVal, SemanticErrorReason as R,
+        aty_bool, aty_f64, aty_i32, APriType, ASymDef,
+        AType, AVal, AVar, ConstVal, SemanticErrorReason as R,
     },
+    name_mangling::mangling,
     parser::{SyntaxType as ST, TokenTree},
 };
 
@@ -20,8 +20,12 @@ impl SemanticAnalyzerPass2 {
             return self.analyze_bop_expr(tt);
         }
 
-        if tt[0].0 == ST::PathExpr && tt.len() > 1 && tt[1].0 == ST::GroupedExpr {
-            return self.analyze_funcall_expr(tt[0].1.as_tt(), tt[1].1.as_tt());
+        if tt[0].0 == ST::PathExpr
+            && tt.len() > 1
+            && tt[1].0 == ST::GroupedExpr
+        {
+            return self
+                .analyze_funcall_expr(tt[0].1.as_tt(), tt[1].1.as_tt());
         }
 
         // Atom Expr
@@ -46,7 +50,11 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn analyze_funcall_expr(&mut self, path: &TokenTree, grouped: &TokenTree) -> AVar {
+    pub(crate) fn analyze_funcall_expr(
+        &mut self,
+        path: &TokenTree,
+        grouped: &TokenTree,
+    ) -> AVar {
         /* get fn path name */
         let name_tok = path[0].1.as_tt()[0].1.as_tok();
         let fn_params_tt = grouped[0].1.as_tt();
@@ -68,16 +76,12 @@ impl SemanticAnalyzerPass2 {
         /* name mangling */
         let fullname = mangling(opname, &param_tys);
 
-        if let Some(afndef) = self.amod.in_mod_find_funsym(fullname) {
-            AVar::efn_call(&afndef.as_ext_fn_dec(), param_syms)
-        }
-        else if let Some(extdec) = ESS.find_func_by_name(fullname) {
-            AVar::efn_call(extdec, param_syms)
-        }
-        else {
+        if let Some(afndef) = self.find_func_by_name(fullname) {
+            AVar::efn_call(afndef, param_syms)
+        } else {
             self.write_dialogsis(
                 R::NoMatchedFunc(opname, param_tys),
-                name_tok.span
+                name_tok.span,
             );
 
             AVar::undefined()
@@ -106,9 +110,11 @@ impl SemanticAnalyzerPass2 {
             if var.ty != valty {
                 if let Ok(_) = valty.try_cast(&var.ty) {
                     valsym = self.cast_val(valsym, var.ty);
-                }
-                else {
-                    self.write_dialogsis(R::CantCastType(valty.clone(), var.ty), span);
+                } else {
+                    self.write_dialogsis(
+                        R::CantCastType(valty.clone(), var.ty),
+                        span,
+                    );
                 }
             }
 
@@ -116,8 +122,8 @@ impl SemanticAnalyzerPass2 {
 
             return AVar {
                 ty: valty,
-                val: AVal::Assign(name, tagid, valsym)
-            }
+                val: AVal::Assign(name, tagid, valsym),
+            };
         }
 
         let var1 = self.analyze_expr(tt1);
@@ -137,7 +143,10 @@ impl SemanticAnalyzerPass2 {
             let var2 = self.analyze_expr(tt2);
             let elseblk_idx = self.push_single_value_scope(var2);
 
-            let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+            let ifblk = AVal::IfBlock {
+                if_exprs: vec![(sym1, ifblk_idx)],
+                else_blk: Some(elseblk_idx),
+            };
 
             return AVar {
                 ty: aty_bool(),
@@ -157,7 +166,10 @@ impl SemanticAnalyzerPass2 {
                 val: AVal::ConstAlias(ConstVal::Bool(true)),
             });
 
-            let ifblk = AVal::IfBlock { if_exprs: vec![(sym1, ifblk_idx)], else_blk: Some(elseblk_idx) };
+            let ifblk = AVal::IfBlock {
+                if_exprs: vec![(sym1, ifblk_idx)],
+                else_blk: Some(elseblk_idx),
+            };
 
             return AVar {
                 ty: aty_bool(),
@@ -201,7 +213,7 @@ impl SemanticAnalyzerPass2 {
                 todo!()
             }
             ST::lit_str => {
-                ty = AType::Pri(APriType::Str);
+                ty = AType::Pri(APriType::Ptr);
                 val = AVal::ConstAlias(ConstVal::Str(tok.value));
             }
             ST::lit_rawstr => {
@@ -383,23 +395,25 @@ impl SemanticAnalyzerPass2 {
         let arg1 = self.build_const_vec_str(sym_syms);
         let arg2 = self.build_const_vec_str(string_syms);
 
-        let cmd_fndec = ESS.find_func("cmd_symbols_replace", &[
-            aty_str(),
-            aty_arr_str(),
-            aty_arr_str()
-        ]).unwrap();
+        let cmd_fndec = self
+            .find_func_by_name(
+                str2sym("cmd_symbols_replace"),
+            )
+            .unwrap();
 
-        let cmd_sym = self.bind_value(cmd_fndec.fn_call_val(&[arg0, arg1, arg2]));
+        let cmd_sym =
+            self.bind_value(cmd_fndec.fn_call_val(&[arg0, arg1, arg2]));
 
-        let exec_fndec = ESS.find_func("exec", &[
-            aty_str(),
-        ]).unwrap();
+        let exec_fndec = self.find_func_by_name(
+            str2sym("exec")
+        )
+        .unwrap();
 
         let exec_res = self.bind_value(exec_fndec.fn_call_val(&[cmd_sym]));
         let ctlstr = self.build_const_str(str2sym("%s\n"));
 
         // print stdout
-        let printf_fndec = ESS.find_unique_func("printf").unwrap();
+        let printf_fndec = self.find_func_by_name(str2sym("printf")).unwrap();
 
         printf_fndec.fn_call_val(&[ctlstr, exec_res])
     }
@@ -553,5 +567,5 @@ fn extract_symbol(value: Symbol) -> Vec<Symbol> {
         syms.push(s)
     }
 
-    syms.into_iter().map(|s| str2sym(s) ).collect()
+    syms.into_iter().map(|s| str2sym(s)).collect()
 }

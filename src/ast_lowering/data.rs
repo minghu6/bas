@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, fmt::Debug};
 
 use indexmap::{indexmap, IndexMap};
 use inkwellkit::{
@@ -6,28 +6,14 @@ use inkwellkit::{
     types::{FloatType, IntType},
 };
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym, sym2str, Symbol, lazy_static::lazy_static, Token};
+use m6lexerkit::{str2sym, sym2str, Symbol, Token};
 
 use super::MIR;
-use crate::{
-    name_mangling::mangling,
-    parser::SyntaxType as ST, core::load_core_exp,
-};
+use crate::parser::SyntaxType as ST;
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Constant
-
-lazy_static! {
-    /// Exported Symbol Set
-    pub static ref ESS: ExtSymSet = {
-        let core = load_core_exp();
-
-        ExtSymSet {
-            mods: vec![core]
-        }
-    };
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,19 +32,49 @@ pub struct AModExp {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AnExtFnDec {
-    // idt: Token,  // Identifier Token
-    // body_idx: Option<usize>,
-    pub name: Symbol,
-    pub params: Vec<(Symbol, AType)>,
+    pub attrs: A3ttrs,
+    pub full_name: Symbol,
+    pub params: Vec<AParamPat>,
     pub ret: AType,
-    pub sign_name: Symbol,
+    pub symbol_name: Symbol,
 }
 
 
-pub(crate) struct AMod {
+pub struct AFnDec {
+    pub idt: Token, // Identifier Token
+    pub attrs: A3ttrs,
+    // body_idx: Option<usize>,
+    pub name: Symbol,
+    pub params: Vec<AParamPat>,
+    pub ret: AType,
+}
+
+
+/// An Annotated Atrrs (Collection)
+#[derive(Debug, Clone)]
+pub struct A3ttrs(pub IndexMap<A3ttrName, A3ttrVal>);
+
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum A3ttrName {
+    NoMangle,
+    VarArg,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum A3ttrVal {
+    Empty,
+}
+
+
+pub struct AMod {
     pub(crate) name: Symbol,
+    /// External Declare
+    pub(crate) efns: IndexMap<Symbol, AnExtFnDec>,
+    /// Local Definition
     pub(crate) afns: IndexMap<Symbol, AFnDec>,
     pub(crate) allocs: IndexMap<Symbol, AFnAlloc>,
     pub(crate) scopes: Vec<AScope>, // Start from Root Scope
@@ -80,18 +96,9 @@ pub enum AType {
 pub enum APriType {
     Float(u8), // float64
     Int(i8),   // i32
-    Str,       // C string
+    Ptr,       // C void*
     // Char,  // u32
     OpaqueStruct(Symbol), // opaque struct pointer type
-}
-
-
-pub struct AFnDec {
-    pub idt: Token,  // Identifier Token
-    // body_idx: Option<usize>,
-    pub name: Symbol,
-    pub params: Vec<AParamPat>,
-    pub ret: AType,
 }
 
 
@@ -130,7 +137,6 @@ pub(crate) enum AVal {
     FnCall {
         call_fn: Symbol,
         args: Vec<Symbol>,
-        sign_name: Symbol,
     },
     BOpExpr {
         op: ST,
@@ -179,18 +185,75 @@ pub struct AParamPat {
 ////////////////////////////////////////////////////////////////////////////////
 //// Implementation
 
-impl ExtSymSet {
-    pub(crate) fn find_func(
-        &self,
-        name: &str,
-        atys: &[AType],
-    ) -> Option<&AnExtFnDec> {
-        let fullname = mangling(str2sym(name), atys);
+impl Debug for AModExp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        for (k, v) in self.afns.iter() {
+            writeln!(f, "{k:?} =>")?;
+            writeln!(f, "{v:#?}\n")?;
+        }
 
-        self.find_func_by_name(fullname)
+        Ok(())
+    }
+}
+
+
+impl Debug for AnExtFnDec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+
+        for (name, _val) in self.attrs.0.iter() {
+            writeln!(f, "@{name:?}")?;
+        }
+
+        write!(f,
+            "{:?}(",
+             self.full_name,
+        )?;
+
+        for (i, param) in self.params.iter().enumerate() {
+            write!(f,
+                "{:?}: {}{}",
+                 param.formal,
+                 param.ty.ident_name(),
+                 if i < self.params.len() - 1 { ", " } else { "" }
+            )?;
+        }
+
+        write!(f, ")")?;
+
+        if self.ret != AType::Void {
+            write!(f, "-> {}", self.ret.ident_name())?;
+        }
+
+        Ok(())
+    }
+}
+
+
+impl A3ttrs {
+    // pub fn push_attr(&mut self, name: A3ttrName, val: A3ttrVal) -> Result<(), A3ttrVal> {
+    //     match self.0.insert(name, val) {
+    //         Some(oldval) => Err(oldval),
+    //         None => Ok(()),
+    //     }
+    // }
+
+    pub fn get_attr(&self, name: A3ttrName) -> Option<&A3ttrVal> {
+        self.0.get(&name)
     }
 
-    pub(crate) fn find_func_by_name(
+    pub fn new() -> Self {
+        A3ttrs(IndexMap::new())
+    }
+
+    pub fn has(&self, name: A3ttrName) -> bool {
+        self.get_attr(name).is_some()
+    }
+}
+
+
+impl ExtSymSet {
+    pub fn find_func_by_name(
         &self,
         fullname: Symbol,
     ) -> Option<&AnExtFnDec> {
@@ -203,29 +266,9 @@ impl ExtSymSet {
         None
     }
 
-    pub(crate) fn find_unique_func(
-        &self,
-        name: &str,
-    ) -> Result<&AnExtFnDec, Vec<&AnExtFnDec>> {
-
-        let fullname = str2sym(name);
-        let mut res = vec![];
-
-        for amod in self.mods.iter() {
-            if let Some(afndec) = amod.in_mod_exp_find(fullname) {
-                res.push(afndec);
-            }
-        }
-
-        if res.is_empty() || res.len() > 1 {
-            Err(res)
-        }
-        else {
-            Ok(res[0])
-        }
-
+    pub fn afns_iter(&self) -> impl Iterator<Item=&AnExtFnDec> {
+        self.mods.iter().map(|amod| amod.afns.values()).flatten()
     }
-
 }
 
 
@@ -244,9 +287,8 @@ impl AnExtFnDec {
         AVar {
             ty: self.ret.clone(),
             val: AVal::FnCall {
-                call_fn: self.name,
+                call_fn: self.full_name,
                 args: args.into_iter().cloned().collect(),
-                sign_name: self.sign_name,
             },
         }
     }
@@ -290,24 +332,26 @@ impl AMod {
     pub(crate) fn init(name: Symbol) -> Self {
         Self {
             name,
+            efns: indexmap! {},
             afns: indexmap! {},
             allocs: indexmap! {},
             scopes: vec![AScope::default()], // push Root Scope
         }
     }
 
-    pub(crate) fn in_mod_find_funsym(
-        &self,
-        fullname: Symbol,
-    ) -> Option<&AFnDec> {
-        self.afns.get(&fullname)
-    }
-
+    /// Export both External Declare and Local Definition
     pub(crate) fn export(&self) -> AModExp {
-        let afns = self.afns
+        let afns = self
+            .afns
             .iter()
-            .map(|(k, v)| (*k, v.as_ext_fn_dec()))
-            .collect();
+            .map(|(k, v)| (*k, v.as_ext_fn_dec()));
+
+        let efns = self
+            .efns
+            .iter()
+            .map(|(k, v)| (*k, v.clone()));
+
+        let afns = afns.chain(efns).collect();
 
         AModExp { afns }
     }
@@ -366,15 +410,11 @@ impl std::fmt::Debug for AFnDec {
 impl AFnDec {
     pub(crate) fn as_ext_fn_dec(&self) -> AnExtFnDec {
         AnExtFnDec {
-            name: self.name,
-            params: self
-                .params
-                .iter()
-                .cloned()
-                .map(|x| (x.formal, x.ty))
-                .collect(),
+            attrs: self.attrs.clone(),
+            full_name: self.name,
+            params: self.params.clone(),
             ret: self.ret.clone(),
-            sign_name: self.name,
+            symbol_name: self.name,
         }
     }
 }
@@ -396,13 +436,12 @@ impl AVar {
     }
 
     /// External function call
-    pub(crate) fn efn_call(efn_dec: &AnExtFnDec, params: Vec<Symbol>) -> Self {
+    pub(crate) fn efn_call(efn_dec: AnExtFnDec, params: Vec<Symbol>) -> Self {
         Self {
-            ty: efn_dec.ret.clone(),
+            ty: efn_dec.ret,
             val: AVal::FnCall {
-                call_fn: efn_dec.name,
+                call_fn: efn_dec.full_name,
                 args: params,
-                sign_name: efn_dec.sign_name,
             },
         }
     }
@@ -471,7 +510,7 @@ impl AType {
                                     }
                                 })
                             }
-                            (APriType::Str, APriType::Str) => aty_str(),
+                            (APriType::Ptr, APriType::Ptr) => aty_str(),
                             _ => return Err(()),
                         })
                     }
@@ -559,7 +598,7 @@ impl AVal {
 //// Function
 
 pub(crate) const fn aty_str() -> AType {
-    AType::Pri(APriType::Str)
+    AType::Pri(APriType::Ptr)
 }
 pub(crate) const fn aty_int(meta: i8) -> AType {
     AType::Pri(APriType::Int(meta))
@@ -581,12 +620,15 @@ pub(crate) const fn aty_f64() -> AType {
 pub(crate) fn aty_opaque_struct(s: &str) -> AType {
     AType::Pri(APriType::OpaqueStruct(str2sym(s)))
 }
+#[allow(unused)]
 pub(crate) const fn aty_arr_int() -> AType {
     AType::Arr(APriType::Int(-4), 1)
 }
+#[allow(unused)]
 pub(crate) const fn aty_arr_float() -> AType {
     AType::Arr(APriType::Float(8), 1)
 }
+#[allow(unused)]
 pub(crate) const fn aty_arr_str() -> AType {
-    AType::Arr(APriType::Str, 1)
+    AType::Arr(APriType::Ptr, 1)
 }

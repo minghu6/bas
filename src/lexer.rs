@@ -112,10 +112,13 @@ pub(crate) fn tokenize(source: &SrcFileInfo) -> TokenizeResult {
     })
 }
 
+
 #[inline]
 fn tokenize_(source: &SrcFileInfo) -> TokenizeResult {
     tokenize__(source, &MATCHERS[..])
 }
+
+
 
 
 #[cfg(test)]

@@ -34,8 +34,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
             AVal::BlockExpr(blk_idx) => self.translate_block(blk_idx),
             AVal::FnParam(idx) => self.translate_fn_param(idx),
-            AVal::FnCall { call_fn: _, args, sign_name } => {
-                self.translate_fn_call(sign_name, args)
+            AVal::FnCall { call_fn, args } => {
+                self.translate_fn_call(call_fn, args)
             }
             AVal::BOpExpr { op, operands } => {
                 self.translate_bop_expr(op, operands)
@@ -186,7 +186,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "",
                     ),
                     APriType::Int(_swidth) => bv,
-                    APriType::Str => todo!(),
+                    APriType::Ptr => todo!(),
                     APriType::OpaqueStruct(_) => unreachable!(),
                 },
                 _ => unreachable!(),
@@ -205,7 +205,7 @@ impl<'ctx> CodeGen<'ctx> {
                         pri.as_int_ty(),
                         "",
                     ),
-                    APriType::Str => todo!(),
+                    APriType::Ptr => todo!(),
                     APriType::OpaqueStruct(_) => unreachable!(),
                 },
                 _ => unreachable!(),

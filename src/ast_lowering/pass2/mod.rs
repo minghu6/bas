@@ -1,13 +1,12 @@
-use std::rc::Rc;
-
 use indexmap::indexmap;
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym, sym2str, Span, Symbol};
+use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol};
 
 use super::{
-    aty_int, aty_str, write_diagnosis, AMod,
-    AScope, ASymDef, AType, AVal, AVar, AnalyzeResult2, ConstVal,
-    SemanticErrorReason as R, MIR, ESS, aty_arr_str, aty_i32,
+    analyze_attrs, analyze_pat_no_top, analyze_ty,
+    aty_int, aty_str, write_diagnosis, A3ttrs, AMod, AScope, ASymDef, AType,
+    AVal, AVar, AnExtFnDec, ConstVal, ExtSymSet, SemanticError,
+    SemanticErrorReason as R, MIR, TokenTree2, APriType,
 };
 use crate::{
     codegen::is_implicit_sym,
@@ -17,9 +16,8 @@ use crate::{
 
 mod expr;
 mod item;
-mod pat;
 mod stmt;
-mod ty;
+
 
 ///
 /// 1. Simplify the Infix Expresssion into SSA/BlockExpr
@@ -27,27 +25,66 @@ mod ty;
 /// 1. Build Scope Bindings
 ///
 ///
-pub(crate) struct SemanticAnalyzerPass2 {
+pub struct SemanticAnalyzerPass2 {
+    src: SrcFileInfo,
+
     amod: AMod,
+    ess: ExtSymSet,
     sc: Vec<usize>, // Scope Counter,
     cur_fn: Option<Symbol>,
-    tt: Rc<TokenTree>,
     cause_lists: Vec<(R, Span)>,
 }
 
 
+pub(crate) type Pass2Result = Result<Pass2Export, SemanticError>;
+
+
+pub struct Pass2Export {
+    pub src: SrcFileInfo,
+    pub amod: AMod,
+    pub ess: ExtSymSet
+}
+
+
 impl SemanticAnalyzerPass2 {
-    pub(crate) fn new(mut amod: AMod, tt: Rc<TokenTree>) -> Self {
+    pub(crate) fn run(
+        src: SrcFileInfo,
+        tt: TokenTree2,
+        mut amod: AMod,
+        ess: ExtSymSet,
+    ) -> Pass2Result {
         for (sym, _afndec) in amod.afns.iter() {
             amod.allocs.insert(*sym, indexmap! {});
         }
 
-        Self {
+        let it = Self {
+            src,
             amod,
+            ess,
             sc: vec![0], // 0 is root
             cur_fn: None,
-            tt,
             cause_lists: vec![],
+        };
+
+        it.analyze(tt)
+    }
+
+    pub(crate) fn analyze(mut self, tt: TokenTree2) -> Pass2Result {
+        for anitem in tt.items.into_iter() {
+            self.do_analyze_item(anitem);
+        }
+
+        if self.cause_lists.is_empty() {
+            Ok(Pass2Export {
+                src: self.src,
+                amod: self.amod,
+                ess: self.ess
+            })
+        } else {
+            Err(SemanticError {
+                cause_lists: self.cause_lists,
+                src: self.src,
+            })
         }
     }
 
@@ -94,17 +131,30 @@ impl SemanticAnalyzerPass2 {
         frames
     }
 
-    pub(crate) fn analyze(mut self) -> AnalyzeResult2 {
-        for (ty, sn) in self.tt.clone().subs.iter() {
-            if *ty == ST::Item {
-                self.do_analyze_item(sn.as_tt());
-            }
-        }
+    #[allow(unused)]
+    pub(crate) fn find_func(
+        &self,
+        name: &str,
+        atys: &[AType],
+    ) -> Option<AnExtFnDec> {
+        let fullname = mangling(str2sym(name), atys);
 
-        if self.cause_lists.is_empty() {
-            Ok(self.amod)
+        self.find_func_by_name(fullname)
+    }
+
+    pub(crate) fn find_func_by_name(
+        &self,
+        fullname: Symbol,
+    ) -> Option<AnExtFnDec> {
+        if let Some(afndec) = self.amod.afns.get(&fullname) {
+            Some(afndec.as_ext_fn_dec())
+        } else if let Some(afndec) = self.amod.efns.get(&fullname) {
+            Some(afndec.clone())
+        }
+        else if let Some(afndec) = self.ess.find_func_by_name(fullname) {
+            Some(afndec.clone())
         } else {
-            Err(self.cause_lists)
+            None
         }
     }
 
@@ -262,14 +312,30 @@ impl SemanticAnalyzerPass2 {
                 let sym = self.bind_value(var.clone());
                 let arg0 = sym;
 
-                let strfullname = mangling(str2sym("str"), &[var.ty.clone()]);
+                let fullname =
+                match var.ty {
+                    AType::Pri(pri) => match pri {
+                        APriType::Float(_) => "stringify_f64",
+                        APriType::Int(_) => "stringify_i32",
+                        APriType::Ptr => "strdup",
+                        APriType::OpaqueStruct(_) => todo!(),
+                    },
+                    AType::Arr(_, _) => todo!(),
+                    AType::AA(_) => todo!(),
+                    AType::Void => todo!(),
+                    AType::PH => todo!(),
+                };
+
+                let fullname = str2sym(fullname);
+                // let strfullname = mangling(str2sym("str"), &[var.ty.clone()]);
+
 
                 let ret_var;
-                if let Some(an_ext_dec) = ESS.find_func_by_name(strfullname) {
+                if let Some(an_ext_dec) = self.find_func_by_name(fullname) {
                     ret_var = an_ext_dec.fn_call_val(&[arg0]);
                 } else {
                     self.write_dialogsis(
-                        R::NoMatchedFunc(strfullname, vec![var.ty.clone()]),
+                        R::NoMatchedFunc(fullname, vec![var.ty.clone()]),
                         span,
                     );
                     ret_var = AVar::undefined()
@@ -297,7 +363,9 @@ impl SemanticAnalyzerPass2 {
     pub(super) fn build_const_vec_str(&mut self, strs: Vec<Symbol>) -> Symbol {
         /* Create Vec */
         let cap = self.build_const_usize(strs.len().try_into().unwrap());
-        let fndec = ESS.find_func("new_vec", &[aty_i32()]).unwrap();
+        let fndec = self.find_func_by_name(
+            str2sym("vec_new_ptr"),
+        ).unwrap();
         let sym_vec = self.bind_value(fndec.fn_call_val(&[cap]));
 
         for s in strs.into_iter() {
@@ -318,10 +386,30 @@ impl SemanticAnalyzerPass2 {
                 }
             };
 
-            let fndec = ESS.find_func("push", &[aty_arr_str(), aty_str()]).unwrap();
+            let fndec = self.find_func_by_name(
+                    str2sym("vec_push_ptr")
+            ).unwrap();
+
             self.bind_value(fndec.fn_call_val(&[sym_vec, sym_str]));
         }
 
         sym_vec
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    //// Other Analyze method
+
+    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TokenTree) -> Symbol {
+        analyze_pat_no_top(tt)
+    }
+
+    pub(crate) fn analyze_ty(&mut self, tt: &TokenTree) -> AType {
+        analyze_ty(&mut self.cause_lists, tt)
+    }
+
+    #[allow(unused)]
+    pub(crate) fn analyze_attrs(&mut self, tt: &TokenTree) -> A3ttrs {
+        analyze_attrs(&mut self.cause_lists, tt)
     }
 }

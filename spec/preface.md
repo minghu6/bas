@@ -17,7 +17,7 @@ Item:
 Attrs:
   | <attr>+
 
-Function:
+Function:  # 函数定义或外部函数声明
   | [Attrs]? <fn> <id> <lparen> [FnParams]? <rparen> (<rarrow> [Type])? ([BlockExpr] | <semi>)
 
 FnParams:
@@ -188,3 +188,16 @@ if COND elif elif else -->
 
 [i32]/[u8]/[ptr]
 
+
+## 属性注解(attr)
+
+
+**no_mangle:**
+
+  1. 函数 fullname = basename,
+  2. 暗示了 `unique`, 同名函数只能有一个，没有依据类型的分发（dispatch）
+  3. 允许变长参数
+
+**symbol_name**
+
+  `@sym(xxx)`

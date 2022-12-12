@@ -32,3 +32,6 @@ sym(Symbol) + tagid(usize) = Unique Identifier
 push([int], int) -> `push` + Arr(-4) + Int(-4) -> push@[i32]#i32
 ```
 
+## 外部引用
+
+ 模块内声明的（函数）引用，导出符号的+/-过滤

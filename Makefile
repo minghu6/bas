@@ -9,20 +9,8 @@ copybin: build
 getbasc: build copybin
 
 testexp0: getbasc
-	@ ./${BARE_COMPILER} ./examples/exp0.bath exp0
+	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath exp0
 	@ ./exp0
-
-testlex:
-	cargo test -- --nocapture test_lex
-
-testparser:
-	cargo test -- --nocapture test_parser
-
-testanalyze:
-	RUST_BACKTRACE=1 cargo test -- --nocapture test_analyze
-
-testcodegen:
-	cargo test -- --nocapture test_codegen
 
 testcompile:
 	cargo test -- --nocapture test_compile

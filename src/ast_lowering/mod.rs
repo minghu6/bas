@@ -1,22 +1,34 @@
 pub mod data;
-mod pass1;
-mod pass2;
+pub mod pass1;
+pub mod pass2;
 
 
 use std::fmt::Debug;
-use std::rc::Rc;
 
 use itertools::Itertools;
-use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
-use pass1::SemanticAnalyzerPass1;
+use m6lexerkit::{sym2str, Span, SrcFileInfo, Symbol, Token};
 
+use crate::{
+    name_mangling::mangling,
+    parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree},
+    ref_source,
+};
+pub use pass1::SemanticAnalyzerPass1;
+pub use pass2::SemanticAnalyzerPass2;
 pub use self::data::*;
-use self::pass2::SemanticAnalyzerPass2;
-use crate::name_mangling::mangling;
-use crate::parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree};
-use crate::{opt_osstr_to_str, ref_source};
 
 
+pub struct TokenTree2 {
+    items: Vec<AnItem>
+}
+
+
+pub enum AnItem {
+    Fn {
+        name: Symbol,
+        body: TokenTree
+    }
+}
 
 
 #[derive(Debug, Clone)]
@@ -40,7 +52,6 @@ pub(crate) enum MIRTy {
 pub enum SemanticErrorReason {
     DupItemDef {
         name: Symbol,
-        prev: Span,
     },
     LackFormalParam,
     IncompatOpType {
@@ -57,12 +68,12 @@ pub enum SemanticErrorReason {
     UnmatchedType(AType, AType),
     UnkonwnType,
     NoMatchedFunc(Symbol, Vec<AType>), // basename, tys
+    DuplicateAttr(Symbol, A3ttrVal),
+    UnknownAttr(Symbol),
 }
 use SemanticErrorReason as R;
 
 pub(crate) type CauseLists = Vec<(R, Span)>;
-pub(crate) type AnalyzeResult = Result<AMod, SemanticError>;
-pub(crate) type AnalyzeResult2 = Result<AMod, CauseLists>;
 
 
 pub struct SemanticError {
@@ -114,14 +125,14 @@ impl std::fmt::Debug for SemanticError {
 
             // writeln!(f, "{}, {:#?}", item.loc, item.dtype)?;
             match cause {
-                R::DupItemDef { name, prev } => {
+                R::DupItemDef { name } => {
                     writeln!(
                         f,
                         "Duplicate item `{}` definition:\n",
                         sym2str(*name)
                     )?;
                     /* frontwards reference */
-                    ref_source!(prev, "=", f, self.src);
+                    // ref_source!(prev, "=", f, self.src);
                     Ok(())
                 }
                 R::LackFormalParam => {
@@ -153,6 +164,20 @@ impl std::fmt::Debug for SemanticError {
 
                     writeln!(f, "No def for {}", sym2str(fullname_sym))
                 }
+                R::DuplicateAttr(attrsym, attrval) => {
+                    writeln!(
+                        f,
+                        "Duplicate Attr annotation {}, prev: {attrval:?}",
+                        sym2str(*attrsym)
+                    )
+                }
+                R::UnknownAttr(attrsym) => {
+                    writeln!(
+                        f,
+                        "Unknown Attr annotation {}",
+                        sym2str(*attrsym)
+                    )
+                }
             }?;
             writeln!(f)?;
             ref_source!(span, "^", f, self.src);
@@ -174,10 +199,24 @@ impl std::fmt::Display for SemanticError {
 impl std::error::Error for SemanticError {}
 
 
+impl TokenTree {
+    pub(crate) fn move_elem(&mut self, i: usize) -> (ST, SN) {
+        std::mem::replace(&mut self.subs[i], (ST::semi, SN::E(Token::eof())))
+    }
+}
+
+
 impl SN {
     pub(crate) fn as_tt(&self) -> &TokenTree {
         match self {
             Self::T(ref tt) => tt,
+            SN::E(_) => unreachable!("{:?}", self),
+        }
+    }
+
+    pub(crate) fn into_tt(self) -> TokenTree {
+        match self {
+            Self::T(tt) => tt,
             SN::E(_) => unreachable!("{:?}", self),
         }
     }
@@ -194,35 +233,6 @@ impl SN {
 ////////////////////////////////////////////////////////////////////////////////
 //// Function
 
-
-
-
-fn _semantic_analyze(tt: TokenTree, src: &SrcFileInfo) -> AnalyzeResult2 {
-    let amod =
-        AMod::init(str2sym(opt_osstr_to_str!(&src.get_path().file_stem())));
-    let tt = Rc::new(tt);
-
-    let pass1 = SemanticAnalyzerPass1::new(amod, tt.clone());
-    let amod = pass1.analyze()?;
-
-    let pass2 = SemanticAnalyzerPass2::new(amod, tt.clone());
-    let amod = pass2.analyze()?;
-
-    Ok(amod)
-}
-
-pub(crate) fn semantic_analyze(
-    tt: TokenTree,
-    src: &SrcFileInfo,
-) -> AnalyzeResult {
-    match _semantic_analyze(tt, src) {
-        Ok(amod) => Ok(amod),
-        Err(cause_lists) => Err(SemanticError {
-            cause_lists,
-            src: src.clone(),
-        }),
-    }
-}
 
 ////////////////////////////////////////
 //// Function shared betweem passes
@@ -242,41 +252,6 @@ pub(crate) fn get_fullname_by_fn_header(
 
         mangling(base, &tys)
     }
-}
-
-pub(crate) fn analyze_fn_params(
-    cause_lists: &mut CauseLists,
-    tt: &TokenTree,
-) -> Vec<AParamPat> {
-    let mut sns = tt.subs.iter().peekable();
-    let mut params = vec![];
-
-    while !sns.is_empty() && sns.peek().unwrap().0 == ST::FnParam {
-        let (param_ty, param_sn) = sns.next().unwrap();
-
-        if *param_ty == ST::id {
-            write_diagnosis(
-                cause_lists,
-                R::LackFormalParam,
-                param_sn.as_tok().span(),
-            );
-        }
-
-        params.push(analyze_fn_param(cause_lists, param_sn.as_tt()));
-    }
-
-    params
-}
-
-pub(crate) fn analyze_fn_param(
-    cause_lists: &mut CauseLists,
-    tt: &TokenTree,
-) -> AParamPat {
-    // PatNoTop
-    let formal = analyze_pat_no_top(tt[0].1.as_tt());
-    let ty = analyze_ty(cause_lists, &tt[1].1.as_tt());
-
-    AParamPat { formal, ty }
 }
 
 pub(crate) fn analyze_pat_no_top(tt: &TokenTree) -> Symbol {
@@ -310,7 +285,10 @@ pub(crate) fn analyze_ty_(tt: &TokenTree) -> Result<AType, Span> {
         return Ok(aty_f64());
     }
     if tok_id.check_value("str") {
-        return Ok(AType::Pri(APriType::Str));
+        return Ok(AType::Pri(APriType::Ptr));
+    }
+    if tok_id.check_value("ptr") {
+        return Ok(AType::Pri(APriType::Ptr));
     }
     if tok_id.check_value("[") {
         if tt.len() < 2 {
@@ -342,6 +320,43 @@ pub(crate) fn analyze_ty_(tt: &TokenTree) -> Result<AType, Span> {
 }
 
 
+pub(crate) fn analyze_attrs(
+    cause_lists: &mut CauseLists,
+    tt: &TokenTree,
+) -> A3ttrs {
+    let mut attrs = A3ttrs::new();
+
+    for (st, sn) in tt.iter() {
+        debug_assert_eq!(*st, ST::attr);
+
+        let idt = sn.as_tok();
+
+        let attr_name = match idt.value_string().as_str() {
+            "no_mangle" => A3ttrName::NoMangle,
+            "vararg" => A3ttrName::VarArg,
+            _ => {
+                write_diagnosis(
+                    cause_lists,
+                    R::UnknownAttr(idt.value),
+                    idt.span,
+                );
+                return attrs;
+            }
+        };
+
+        if let Some(oldval) = attrs.0.insert(attr_name, A3ttrVal::Empty) {
+            write_diagnosis(
+                cause_lists,
+                R::DuplicateAttr(idt.name, oldval),
+                idt.span,
+            )
+        }
+    }
+
+    attrs
+}
+
+
 pub(crate) fn write_diagnosis(
     cause_lists: &mut Vec<(R, Span)>,
     r: R,
@@ -361,32 +376,5 @@ pub(crate) fn toks_to_span(toks: &[Token]) -> Span {
             from: toks[0].span.from,
             end: toks.last().unwrap().span.end,
         }
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use m6lexerkit::SrcFileInfo;
-
-    use crate::{
-        ast_lowering::semantic_analyze, lexer::tokenize, parser::parse,
-    };
-
-    #[test]
-    fn test_analyze() -> Result<(), Box<dyn std::error::Error>> {
-        let path = PathBuf::from("./examples/exp1.bath");
-        let src = SrcFileInfo::new(&path).unwrap();
-
-        let tokens = tokenize(&src)?;
-        let tt = parse(tokens, &src)?;
-        let amod = semantic_analyze(tt, &src)?;
-
-        println!("{:#?}", amod);
-
-        Ok(())
     }
 }

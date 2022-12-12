@@ -1,9 +1,31 @@
 
-@extern
+@vararg
 @no_mangle
-fn printf(str);
+fn printf(ctrlstr: ptr);
 
-@extern
 @no_mangle
-fn len(str) -> int;
+fn strlen(str: ptr) -> int;
 
+@no_mangle
+fn stringify_i32(val: int) -> ptr;
+
+@no_mangle
+fn stringify_f64(val: float) -> ptr;
+
+@no_mangle
+fn strdup(val: ptr) -> ptr;
+
+@no_mangle
+fn vec_new_ptr(cap: int) -> ptr;
+
+@no_mangle
+fn vec_push_ptr(vec: ptr, str: ptr) -> int;
+
+@no_mangle
+fn vec_get_ptr(vec: ptr, idx: int) -> ptr;
+
+@no_mangle
+fn cmd_symbols_replace(src: ptr, syms: ptr, strs: ptr) -> ptr;
+
+@no_mangle
+fn exec(cmd: ptr) -> ptr;

@@ -28,7 +28,7 @@ impl<'ctx> CodeGen<'ctx> {
                     1 | -1 => i8_t.into(),
                     _ => unimplemented!("{:?}", aty)
                 },
-                APriType::Str => i8ptr_t.into(),
+                APriType::Ptr => i8ptr_t.into(),
                 APriType::OpaqueStruct(name) =>
                     get_ctx()
                     .opaque_struct_type(&sym2str(*name))

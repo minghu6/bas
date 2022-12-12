@@ -13,7 +13,7 @@ use inkwellkit::{
 };
 use m6lexerkit::{sym2str, Symbol};
 
-use crate::ast_lowering::{AMod, AScope, AVar, AVal};
+use crate::ast_lowering::{AMod, AScope, AVar, AVal, ExtSymSet};
 
 pub(crate) mod expr;
 pub(crate) mod include;
@@ -54,6 +54,7 @@ pub(crate) type CodeGenResult = Result<(), CodeGenError>;
 pub(crate) struct CodeGen<'ctx> {
     vmmod: VMMod<'ctx>,
     amod: AMod,
+    ess: ExtSymSet,
     config: CompilerConfig,
     blks: Vec<LogicBlock<'ctx>>, // Scope - Basic Block Bindings
     fn_alloc: IndexMap<(Symbol, usize), PointerValue<'ctx>>,
@@ -71,7 +72,7 @@ pub(crate) struct CodeGen<'ctx> {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-    pub(crate) fn new(amod: AMod, config: CompilerConfig) -> Self {
+    pub(crate) fn run(amod: AMod, ess: ExtSymSet, config: CompilerConfig) -> CodeGenResult {
         let vmmod = VMMod::new(&sym2str(amod.name));
         let mut blks: Vec<LogicBlock> = amod.scopes.iter().map(|ascope| LogicBlock {
             paren: ascope.paren,
@@ -123,9 +124,11 @@ impl<'ctx> CodeGen<'ctx> {
         fpm.initialize();
         Self::include_core(&vmmod.module);
 
-        Self {
+
+        let mut it = Self {
             vmmod,
             amod,
+            ess,
             config,
             blks,
             fn_alloc: indexmap! {},
@@ -137,7 +140,17 @@ impl<'ctx> CodeGen<'ctx> {
             continue_to: None,
             has_ret: false,
             builder: VMMod::get_builder(),
+        };
+
+        match it.config.target_type {
+            TargetType::Bin => {
+                it.gen_mod();
+                it.gen_file()?;
+            },
+            _ => unimplemented!(),
         }
+
+        Ok(())
     }
 
     pub(crate) fn root_scope(&self) -> &AScope {
@@ -239,18 +252,6 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(bb);
     }
 
-    pub(crate) fn gen(&mut self) -> CodeGenResult {
-        match self.config.target_type {
-            TargetType::Bin => self.gen_bin(),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn gen_bin(&mut self) -> CodeGenResult {
-        // self.vmmod.include_all();
-        self.gen_items();
-        self.gen_file()
-    }
 
 }
 
@@ -291,25 +292,6 @@ impl<'ctx> LogicBlock<'ctx> {
 
 }
 
-// impl<'ctx> From<&AScope> for LogicBlock<'ctx> {
-//     fn from(ascope: &AScope) -> Self {
-//         Self {
-//             paren: ascope.paren,
-//             bbs: vec![],
-//             is_val: None,  // Be Unkonwn yet
-//             implicit_bindings: IndexMap::with_capacity(
-//                 ascope.implicit_bindings.len(),
-//             ),
-//         }
-//     }
-// }
-
-pub(crate) fn gen_code(amod: AMod, config: CompilerConfig) -> CodeGenResult {
-    let mut codegen = CodeGen::new(amod, config);
-
-    codegen.gen()
-}
-
 
 #[cfg(test)]
 pub(crate) fn sh_llvm_config(debug: bool) -> CompilerConfig {
@@ -341,24 +323,15 @@ pub(crate) fn sh_obj_config(debug: bool, path: PathBuf) -> CompilerConfig {
 mod tests {
     use std::path::PathBuf;
 
-    use m6lexerkit::SrcFileInfo;
-
     use crate::{
-        ast_lowering::semantic_analyze,
-        codegen::{gen_code, sh_llvm_config},
-        lexer::tokenize,
-        parser::parse,
+        codegen::sh_llvm_config, driver::RunCompiler,
     };
 
     #[test]
     fn test_codegen() -> Result<(), Box<dyn std::error::Error>> {
         let path = PathBuf::from("./examples/exp1.bath");
-        let src = SrcFileInfo::new(&path).unwrap();
 
-        let tokens = tokenize(&src)?;
-        let tt = parse(tokens, &src)?;
-        let amod = semantic_analyze(tt, &src)?;
-        gen_code(amod, sh_llvm_config(true))?;
+        RunCompiler::new(&path, sh_llvm_config(true))?;
 
         Ok(())
     }

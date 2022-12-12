@@ -1,10 +1,11 @@
 use m6coll::KVEntry;
+use m6lexerkit::{Symbol, sym2str};
 
 use crate::{
     ast_lowering::{
-        analyze_fn_params, get_fullname_by_fn_header, AParamPat, AType, AVal,
+        AVal,
         AVar, MIR,
-        SemanticAnalyzerPass2
+        SemanticAnalyzerPass2, AnItem, AType
     },
     parser::{SyntaxType as ST, TokenTree},
 };
@@ -12,43 +13,42 @@ use crate::{
 
 
 impl SemanticAnalyzerPass2 {
-    pub(crate) fn do_analyze_item(&mut self, tt: &TokenTree) {
-        for (ty, sn) in tt.subs.iter() {
-            if *ty == ST::Function {
-                self.do_analyze_fn(sn.as_tt())
-            }
+    pub(crate) fn do_analyze_item(&mut self, anitem: AnItem) {
+        match anitem {
+            AnItem::Fn { name, body } => {
+                self.do_analyze_fn(name, body)
+            },
         }
     }
 
-    /// id(fn name) - FnParams(fn params) - Ret(ret type) -  -BlockExpr(body)
-    pub(crate) fn do_analyze_fn(&mut self, tt: &TokenTree) {
-        let fn_base_name = tt[0].1.as_tok().value;
-        let params = self.analyze_fn_params(tt[1].1.as_tt());
-        let fn_full_name = get_fullname_by_fn_header(fn_base_name, &params);
-
-        let body = tt.last().1.as_tt();
-
-        self.cur_fn = Some(fn_full_name);
+    /// id(fn name) - FnParams(fn params) - Ret(ret type) - BlockExpr(body)
+    pub(crate) fn do_analyze_fn(&mut self, name: Symbol, body: TokenTree) {
+        // Set current fn name
+        self.cur_fn = Some(name);
 
         /* Unpack Param (into body) */
 
         let scope_idx = self.push_new_scope();
 
-        // There must be definition by Pass1
-        debug_assert!(self.amod.afns.get(&fn_full_name).is_some());
+        if let Some(afn) = self.amod.afns.get(&name) {
+            let params = afn.params.clone();
 
-        for (i, param_pat) in params.into_iter().enumerate() {
-            self.cur_scope_mut()
-                .explicit_bindings
-                .push(KVEntry(param_pat.formal, (0, param_pat.ty.clone())));
+            for (i, param_pat) in params.into_iter().enumerate() {
+                self.cur_scope_mut()
+                    .explicit_bindings
+                    .push(KVEntry(param_pat.formal, (0, param_pat.ty.clone())));
 
-            self.cur_scope_mut().mirs.push(MIR::bind_value(
-                param_pat.formal,
-                AVar {
-                    ty: param_pat.ty.clone(),
-                    val: AVal::FnParam(i as u32),
-                },
-            ))
+                self.cur_scope_mut().mirs.push(MIR::bind_value(
+                    param_pat.formal,
+                    AVar {
+                        ty: param_pat.ty.clone(),
+                        val: AVal::FnParam(i as u32),
+                    },
+                ))
+            }
+        }
+        else {
+            unreachable!("There must be definition by Pass1 {}", sym2str(name))
         }
 
         // body to stmts
@@ -56,7 +56,7 @@ impl SemanticAnalyzerPass2 {
         self.do_analyze_block_with_scope(scope_idx, body[0].1.as_tt());
 
         let val = AVal::DefFn {
-            name: fn_base_name,
+            name,
             scope_idx,
         };
         self.bind_value(AVar {
@@ -68,10 +68,4 @@ impl SemanticAnalyzerPass2 {
         self.cur_fn = None;
     }
 
-    pub(crate) fn analyze_fn_params(
-        &mut self,
-        tt: &TokenTree,
-    ) -> Vec<AParamPat> {
-        analyze_fn_params(&mut self.cause_lists, tt)
-    }
 }

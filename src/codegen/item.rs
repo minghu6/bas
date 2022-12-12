@@ -1,21 +1,32 @@
 use indexmap::indexmap;
-use inkwellkit::{config::OptLv, get_ctx};
+use inkwellkit::{config::OptLv, get_ctx, module::Linkage};
 use itertools::Itertools;
 use m6lexerkit::{sym2str, Symbol};
 
 use super::CodeGen;
-use crate::ast_lowering::{AFnDec, AParamPat, AVal, MIR, AType};
+use crate::ast_lowering::{AParamPat, AVal, MIR, AType, AnExtFnDec};
 
 
 
 
 impl<'ctx> CodeGen<'ctx> {
-    pub(crate) fn gen_items(&mut self) {
-        // codegen defn
-        for (_fsym, afndec) in self.amod.afns.iter() {
-            self.gen_fn_dec(afndec);
+
+    pub(crate) fn gen_mod(&mut self) {
+        // Generate fn declaration
+        for afndec in self.amod.afns.values() {
+            self.gen_fn_dec(&afndec.as_ext_fn_dec(), None);
+        }
+        for afndec in self.amod.efns.values() {
+            self.gen_fn_dec(afndec, Some(Linkage::External));
+        }
+        for afndec in self.ess.afns_iter() {
+            self.gen_fn_dec(afndec, Some(Linkage::External));
         }
 
+        self.gen_items()
+    }
+
+    pub(crate) fn gen_items(&mut self) {
         for MIR {
             name: _,
             mirty: _,
@@ -33,7 +44,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn gen_fn_dec(&self, afndec: &AFnDec) {
+    pub(crate) fn gen_fn_dec(&self, afndec: &AnExtFnDec, linkage: Option<Linkage>) {
         let vm_ret = self.gen_aty_as_ret_type(&afndec.ret);
         let vm_args = afndec
             .params
@@ -47,10 +58,10 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.vmmod
             .module
-            .add_function(&sym2str(afndec.name), fn_t, None);
+            .add_function(&sym2str(afndec.symbol_name), fn_t, linkage);
     }
 
-    /// Name is sign name
+    /// Name is symbol name
     pub(super) fn gen_fn_body(&mut self, name: Symbol, scope_idx: usize) {
         let module = &self.vmmod.module;
         let ctx = get_ctx();
@@ -73,13 +84,13 @@ impl<'ctx> CodeGen<'ctx> {
             self.fn_alloc.insert((*sym, *tagid), var);
         }
 
-        // push into fn params
-        if let Some(_afndec) = self.amod.in_mod_find_funsym(name) {
+        // // push into fn params
+        // if let Some(_afndec) = self.amod.in_mod_find_funsym(name) {
 
-        }
-        else {
-            unreachable!("{}", sym2str(name))
-        }
+        // }
+        // else {
+        //     unreachable!("{}", sym2str(name))
+        // }
 
         // set terminator
         let bb_terminal = self.insert_terminal_bb(fn_val);

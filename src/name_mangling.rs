@@ -87,8 +87,8 @@ impl APriType {
 
                 format!("{signed}{bits}")
             },
-            Self::Str => {
-                format!("str")
+            Self::Ptr => {
+                format!("ptr")
             },
             Self::OpaqueStruct(struct_name) => {
                 format!("{{{}}}", sym2str(*struct_name))
@@ -118,8 +118,8 @@ impl APriType {
                         }
                     }
                 },
-                's' => {
-                    return Some(APriType::Str)
+                'p' => {
+                    return Some(APriType::Ptr)
                 },
                 '{' => {
                     if let Some(delidx) = s.find('}') {
