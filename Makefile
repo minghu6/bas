@@ -9,7 +9,7 @@ copybin: build
 getbasc: build copybin
 
 testexp0: getbasc
-	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath exp0
+	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath exp0 -O 2
 	@ ./exp0
 
 testcompile:

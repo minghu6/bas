@@ -4,8 +4,7 @@ use itertools::Itertools;
 use m6lexerkit::{sym2str, Symbol};
 
 use super::CodeGen;
-use crate::ast_lowering::{AParamPat, AVal, MIR, AType, AnExtFnDec};
-
+use crate::ast_lowering::{AParamPat, AVal, MIR, AType, AnExtFnDec, A3ttrName};
 
 
 
@@ -54,7 +53,13 @@ impl<'ctx> CodeGen<'ctx> {
             })
             .collect_vec();
 
-        let fn_t = vm_ret.fn_type(&vm_args, false);
+        let mut is_var_args = false;
+
+        if afndec.attrs.has(A3ttrName::VarArg) {
+            is_var_args = true;
+        }
+
+        let fn_t = vm_ret.fn_type(&vm_args, is_var_args);
 
         self.vmmod
             .module
@@ -83,14 +88,6 @@ impl<'ctx> CodeGen<'ctx> {
             );
             self.fn_alloc.insert((*sym, *tagid), var);
         }
-
-        // // push into fn params
-        // if let Some(_afndec) = self.amod.in_mod_find_funsym(name) {
-
-        // }
-        // else {
-        //     unreachable!("{}", sym2str(name))
-        // }
 
         // set terminator
         let bb_terminal = self.insert_terminal_bb(fn_val);

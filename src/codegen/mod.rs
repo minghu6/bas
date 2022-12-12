@@ -16,7 +16,6 @@ use m6lexerkit::{sym2str, Symbol};
 use crate::ast_lowering::{AMod, AScope, AVar, AVal, ExtSymSet};
 
 pub(crate) mod expr;
-pub(crate) mod include;
 pub(crate) mod item;
 mod targets;
 pub(crate) mod ty;
@@ -122,7 +121,7 @@ impl<'ctx> CodeGen<'ctx> {
         fpm.add_tail_call_elimination_pass();
 
         fpm.initialize();
-        Self::include_core(&vmmod.module);
+        // Self::include_core(&vmmod.module);
 
 
         let mut it = Self {
