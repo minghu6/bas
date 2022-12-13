@@ -15,9 +15,6 @@ use crate::{
 };
 
 
-pub const ID_VEC: &str = "Vec";
-
-
 ////////////9////////////////////////////////////////////////////////////////////
 //// Constant
 
@@ -33,13 +30,7 @@ pub const ID_VEC: &str = "Vec";
 //// Implementation (codegen)
 
 impl<'ctx> CodeGen<'ctx> {
-    pub fn aty_arr_as_ret_type(
-        &self,
-        _aty: &APriType,
-        _d: &u8,
-    ) -> RetTypeEnum<'ctx> {
-        RetTypeEnum::StructType(get_ctx().opaque_struct_type(ID_VEC))
-    }
+
 
     // pub fn gen_aty_arr_as_basic_meta_type(
     //     &self,

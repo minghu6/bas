@@ -63,6 +63,10 @@ ExprSpan:
   | [ReturnExpr]
   | [CmdExpr]
   | [SideEffectExpr]
+  | [FunCallExpr]
+
+FunCallExpr:
+  | [PathExpr] [GroupedExpr]
 
 ExprBlk:
   | [BlockExpr]

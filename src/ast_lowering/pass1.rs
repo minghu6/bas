@@ -1,12 +1,12 @@
-use m6lexerkit::{str2sym, Span, SrcFileInfo, Symbol};
+use m6lexerkit::{str2sym, Span, SrcFileInfo, Symbol, sym2str};
 
 use super::{ ExtSymSet, AnItem, TokenTree2};
 use crate::{
     ast_lowering::{
         analyze_attrs, analyze_pat_no_top, analyze_ty,
-        get_fullname_by_fn_header, write_diagnosis, A3ttrName, A3ttrs, AFnDec,
+        calc_fullname, write_diagnosis, A3ttrName, A3ttrs, AFnDec,
         AMod, AParamPat, AType, SemanticError,
-        SemanticErrorReason as R, AnExtFnDec,
+        SemanticErrorReason as R, AnExtFnDec, A3ttrVal,
     },
     opt_osstr_to_str,
     parser::{SyntaxType as ST, TokenTree},
@@ -94,7 +94,7 @@ impl SemanticAnalyzerPass1 {
     }
 
     /// Function Definition or Exrernal Function Declare
-    pub(crate) fn do_analyze_fn(&mut self, attrs: A3ttrs, tt: TokenTree) -> Option<AnItem> {
+    pub(crate) fn do_analyze_fn(&mut self, mut attrs: A3ttrs, tt: TokenTree) -> Option<AnItem> {
         // Syntax Node Stream
         let mut p = 0;
 
@@ -117,10 +117,17 @@ impl SemanticAnalyzerPass1 {
         }
 
         let full_name;
+
+        // 作为特殊的入口，main最多只有一个实现
+        if sym2str(fn_base_name) == "main" {
+            attrs.push_attr(A3ttrName::NoMangle, A3ttrVal::Empty);
+            attrs.push_attr(A3ttrName::VarArg, A3ttrVal::Empty);
+        }
+
         if attrs.has(A3ttrName::NoMangle) {
             full_name = fn_base_name
         } else {
-            full_name = get_fullname_by_fn_header(fn_base_name, &params);
+            full_name = calc_fullname(fn_base_name, &params);
         }
 
         if let Some(_afn) = self.find_func_by_name(full_name) {
@@ -193,9 +200,20 @@ impl SemanticAnalyzerPass1 {
     }
 
     pub(crate) fn analyze_fn_param(&mut self, tt: &TokenTree) -> AParamPat {
+        // println!("param: {tt:#?}");
+
+        let mut p = 0;
         // PatNoTop
-        let formal = self.analyze_pat_no_top(tt[0].1.as_tt());
-        let ty = self.analyze_ty(&tt[1].1.as_tt());
+        let formal;
+        if tt[p].0 == ST::PatNoTop {
+            formal = self.analyze_pat_no_top(tt[0].1.as_tt());
+            p += 1;
+        }
+        else {
+            formal = str2sym("_");
+        }
+
+        let ty = self.analyze_ty(&tt[p].1.as_tt());
 
         AParamPat { formal, ty }
     }

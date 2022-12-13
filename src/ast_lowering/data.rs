@@ -19,6 +19,12 @@ use crate::parser::SyntaxType as ST;
 ////////////////////////////////////////////////////////////////////////////////
 //// Structure
 
+#[derive(Debug, Clone, Copy)]
+pub enum ATag {
+    RAW,
+    PH
+}
+
 
 /// Exported Symbol Set
 pub struct ExtSymSet {
@@ -166,8 +172,9 @@ pub(crate) struct AVar {
 #[derive(Default)]
 pub(crate) struct AScope {
     pub(crate) paren: Option<usize>,
-    /// val: tagid, ty
-    pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AType)>>,
+    /// val: tagid, ty; tagid 区别于函数内所有同名不同作用域的局部变量
+    pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AVar)>>,
+    /// idx - mir index
     pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
     pub(crate) mirs: Vec<MIR>,
     pub(crate) ret: Option<AVar>,
@@ -231,12 +238,9 @@ impl Debug for AnExtFnDec {
 
 
 impl A3ttrs {
-    // pub fn push_attr(&mut self, name: A3ttrName, val: A3ttrVal) -> Result<(), A3ttrVal> {
-    //     match self.0.insert(name, val) {
-    //         Some(oldval) => Err(oldval),
-    //         None => Ok(()),
-    //     }
-    // }
+    pub fn push_attr(&mut self, name: A3ttrName, val: A3ttrVal) -> Option<A3ttrVal> {
+        self.0.insert(name, val)
+    }
 
     pub fn get_attr(&self, name: A3ttrName) -> Option<&A3ttrVal> {
         self.0.get(&name)
@@ -374,7 +378,7 @@ impl AScope {
     pub(crate) fn in_scope_find_sym(
         &self,
         q: &Symbol,
-    ) -> Option<(usize, AType)> {
+    ) -> Option<(usize, AVar)> {
         self.explicit_bindings
             .iter()
             .rev()
@@ -389,7 +393,7 @@ impl std::fmt::Debug for AScope {
         f.debug_struct("AScope")
             .field("paren", &self.paren)
             .field("explicit_bindings", &self.explicit_bindings)
-            .field("implicit_bindings", &self.implicit_bindings)
+            // .field("implicit_bindings", &self.implicit_bindings)
             .field("mirs", &self.mirs)
             .field("ret", &self.ret)
             .finish()
@@ -484,7 +488,9 @@ impl AType {
             | ST::gt
             | ST::ge
             | ST::eq
-            | ST::neq => {
+            | ST::neq
+            | ST::mul
+             => {
                 match (ty1, ty2) {
                     (Self::Pri(prity1), Self::Pri(prity2)) => {
                         Ok(match (prity1, prity2) {
@@ -590,6 +596,28 @@ impl AVal {
             _ => None,
         }
     }
+
+    // /// Get origin symbol if it exists
+    // pub(crate) fn get_sym(&self) -> Option<Symbol> {
+    //     match self {
+    //         AVal::DefFn { name, scope_idx } => todo!(),
+    //         AVal::IfBlock { if_exprs, else_blk } => todo!(),
+    //         AVal::InfiLoopExpr(_) => todo!(),
+    //         AVal::BlockExpr(_) => todo!(),
+    //         AVal::FnParam(_) => todo!(),
+    //         AVal::FnCall { call_fn, args } => todo!(),
+    //         AVal::BOpExpr { op, operands } => todo!(),
+    //         AVal::TypeCast { name, ty } => todo!(),
+    //         AVal::ConstAlias(_) => todo!(),
+    //         AVal::Var(_, _) => todo!(),
+    //         AVal::Assign(_, _, _) => todo!(),
+    //         AVal::Break => todo!(),
+    //         AVal::Continue => todo!(),
+    //         AVal::Return(_) => todo!(),
+    //         AVal::PH => todo!(),
+    //     }
+    // }
+
 }
 
 

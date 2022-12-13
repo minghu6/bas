@@ -1,6 +1,6 @@
 use std::{fmt::Debug, ops::{Index, IndexMut}, slice::SliceIndex};
 
-use m6lexerkit::{SrcFileInfo, Token};
+use m6lexerkit::{SrcFileInfo, Token, Span};
 use m6parserkit::gen_syntax_enum;
 
 use crate::ref_source;
@@ -51,6 +51,7 @@ gen_syntax_enum! [ pub SyntaxType |
     IfExpr,
     LoopExpr,
     InfiLoopExpr,
+    FunCallExpr,
 
     r#fn,
     r#let,
@@ -112,6 +113,7 @@ gen_syntax_enum! [ pub SyntaxType |
     lshf_assign,
     rshf_assign,
     attr,
+    tag,
     eof
 ];
 
@@ -213,6 +215,11 @@ pub enum ParseErrorReason {
         four: SyntaxType,
         found: Token,
     },
+    Lack {
+        lack: String,
+        four: String,
+        span: Span
+    }
 }
 
 
@@ -230,9 +237,9 @@ impl Debug for ParseError {
 
         writeln!(f, "{:?}", self.reason)?;
 
-        let found_tok = self.reason.token();
+        let span = self.reason.span();
 
-        ref_source!(found_tok.span, "^", f, self.src);
+        ref_source!(span, "^", f, self.src);
 
         Ok(())
     }
@@ -246,14 +253,23 @@ impl ParseErrorReason {
         }
     }
 
-    pub(super) fn token(&self) -> &Token {
+    pub(super) fn span(&self) -> Span {
         match self {
             Self::Expect {
                 expect: _,
                 four: _,
                 found,
-            } => found,
-            Self::Unrecognized { four: _, found } => found,
+            } => found.span,
+            Self::Unrecognized { four: _, found } => found.span,
+            Self::Lack { lack: _, four: _, span } => *span
+        }
+    }
+
+    pub(crate) fn lack(lack: &str, four: &str, span: Span) -> Self {
+        Self::Lack {
+            lack: lack.to_string(),
+            four: four.to_string(),
+            span
         }
     }
 }
@@ -270,6 +286,9 @@ impl Debug for ParseErrorReason {
             }
             Self::Unrecognized { four, found } => {
                 writeln!(f, "Unrecognized token {found:?} when parsing {four}")
+            },
+            Self::Lack { lack, four, .. } => {
+                writeln!(f, "Lack {lack} for {four} ")
             }
         }
     }
@@ -343,6 +362,11 @@ impl Parser {
         }
 
         &self.tokens[detected_cursor]
+    }
+
+    /// Unchecked !
+    fn prev_t(&self) -> &Token {
+        &self.tokens[self.cursor - 1]
     }
 
     fn is_end(&self) -> bool {

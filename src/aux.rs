@@ -12,8 +12,10 @@ macro_rules! ref_source {
         let loc = $src.boffset2srcloc($span.from);
         let linestr = $src.linestr($span.from).unwrap();
 
+        let width = std::cmp::min($span.len(), linestr.chars().count());
+
         writeln!($f, "{linestr}")?;
-        writeln!($f, "{}{}", " ".repeat(loc.col - 1), $c.repeat($span.len()))?;
+        writeln!($f, "{}{}", " ".repeat(loc.col - 1), $c.repeat(width))?;
         writeln!(
             $f,
             "--> {}:{}:{}",
@@ -23,5 +25,3 @@ macro_rules! ref_source {
         )?;
     };
 }
-
-

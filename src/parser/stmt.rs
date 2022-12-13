@@ -1,5 +1,6 @@
 use super::{
-    ParseResult2, Parser, SyntaxNode as SN, SyntaxType as ST, TokenTree,
+    ParseErrorReason as R, ParseResult2, Parser, SyntaxNode as SN,
+    SyntaxType as ST, TokenTree,
 };
 
 
@@ -22,8 +23,7 @@ impl Parser {
                 subs.push((ST::assign, SN::E(self.unchecked_advance())));
                 subs.push((ST::Expr, SN::T(self.parse_expr()?)));
             }
-        }
-        else {
+        } else {
             subs.push((ST::Expr, SN::T(self.parse_expr()?)));
         }
 
@@ -36,11 +36,9 @@ impl Parser {
         let mut subs = vec![];
 
         loop {
-
             if self.peek1_t().check_name("let") {
                 subs.push((ST::Stmt, SN::T(self.parse_stmt()?)));
-            }
-            else {
+            } else {
                 let expr_sn = SN::T(self.parse_expr()?);
                 if self.peek1_t().check_name("semi") {
                     let semi_sn = SN::E(self.unchecked_advance());
@@ -50,6 +48,14 @@ impl Parser {
                     ]);
                     subs.push((ST::Stmt, SN::T(stmt_tt)));
                 } else {
+                    if !self.peek1_t().check_name("rbrace") {
+                        return Err(R::Expect {
+                            expect: ST::semi,
+                            four: ST::Stmt,
+                            found: self.unchecked_advance(),
+                        });
+                    }
+
                     subs.push((ST::Expr, expr_sn));
                     break;
                 }

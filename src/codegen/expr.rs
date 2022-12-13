@@ -19,7 +19,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         match mirty {
             MIRTy::ValBind => {
-                self.bind_val(name, bv);
+                self.bind_value(name, bv);
             },
             MIRTy::VarAssign => {
                 self.assign_var((name, tagid.unwrap()), bv)
@@ -50,7 +50,9 @@ impl<'ctx> CodeGen<'ctx> {
                 res
             },
             AVal::TypeCast { name, ty } => self.translate_type_cast(name, ty),
-            AVal::Var(sym, tagid) => self.translate_local_var(sym, tagid),
+            AVal::Var(sym, tagid) => {
+                self.translate_var(sym, tagid)
+            },
             AVal::Assign(sym, tagid, valsym) => {
                 let bv = self.find_sym(valsym).unwrap();
                 self.assign_var((sym, tagid), bv);
@@ -60,9 +62,13 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn translate_local_var(&self, sym: Symbol, tagid: usize) -> BasicValueEnum<'ctx> {
-        let ptr = self.fn_alloc.get(&(sym, tagid)).unwrap();
-        self.builder.build_load(*ptr, "")
+    /// load local variable value
+    fn translate_var(&self, sym: Symbol, tagid: usize) -> BasicValueEnum<'ctx> {
+        if let Some(ptrval) = self.fn_alloc.get(&(sym, tagid)) {
+            self.builder.build_load(*ptrval, "")
+        } else {
+            unreachable!("Bug: escaped symbol: {sym:?}")
+        }
     }
 
     fn translate_bop_expr(
@@ -93,11 +99,11 @@ impl<'ctx> CodeGen<'ctx> {
                 if ope1st.is_int_value() {
                     let operand1 = ope1st.into_int_value();
                     let operand2 = ope2nd.into_int_value();
-                    self.builder.build_int_mul(operand1, operand2, "").into()
+                    self.builder.build_int_sub(operand1, operand2, "").into()
                 } else if ope1st.is_float_value() {
                     let operand1 = ope1st.into_float_value();
                     let operand2 = ope2nd.into_float_value();
-                    self.builder.build_float_mul(operand1, operand2, "").into()
+                    self.builder.build_float_sub(operand1, operand2, "").into()
                 } else {
                     unimplemented!("op1st: {:?}", ope1st)
                 }

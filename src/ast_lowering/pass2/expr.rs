@@ -3,6 +3,7 @@ use m6lexerkit::{str2sym, sym2str, Symbol};
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
+use crate::ast_lowering::ATag;
 use crate::{
     ast_lowering::{
         aty_bool, aty_f64, aty_i32, APriType, ASymDef,
@@ -20,14 +21,6 @@ impl SemanticAnalyzerPass2 {
             return self.analyze_bop_expr(tt);
         }
 
-        if tt[0].0 == ST::PathExpr
-            && tt.len() > 1
-            && tt[1].0 == ST::GroupedExpr
-        {
-            return self
-                .analyze_funcall_expr(tt[0].1.as_tt(), tt[1].1.as_tt());
-        }
-
         // Atom Expr
         let (ty, sn) = &tt[0];
         let paren_tt = tt;
@@ -39,6 +32,7 @@ impl SemanticAnalyzerPass2 {
             ST::BreakExpr => self.analyze_break_expr(tt),
             ST::ContinueExpr => self.analyze_continue_expr(tt),
 
+            ST::FunCallExpr => self.analyze_funcall_expr(tt),
             ST::GroupedExpr => self.analyze_expr(&tt[0].1.as_tt()),
             ST::LitExpr => self.analyze_lit_expr(tt),
             ST::PathExpr => self.analyze_path_expr(tt),
@@ -52,13 +46,29 @@ impl SemanticAnalyzerPass2 {
 
     pub(crate) fn analyze_funcall_expr(
         &mut self,
-        path: &TokenTree,
-        grouped: &TokenTree,
+        tt: &TokenTree
     ) -> AVar {
-        /* get fn path name */
-        let name_tok = path[0].1.as_tt()[0].1.as_tok();
-        let fn_params_tt = grouped[0].1.as_tt();
+        debug_assert_eq!(tt[0].0, ST::PathExpr);
+        debug_assert_eq!(tt[1].0, ST::GroupedExpr);
 
+        let path = tt[0].1.as_tt();
+        let grouped = tt[1].1.as_tt();
+
+        /* get fn path name */
+        let mut p = 0;
+
+        let mut tag = None;
+        if path[p].0 == ST::tag {
+            tag = Some(self.analyze_tag(path[p].1.as_tok()));
+            p += 1;
+        }
+
+        debug_assert_eq!(path[p].0, ST::PathExprSeg);
+        let seg0 = &path[p].1.as_tt();
+        let name_tok = seg0[0].1.as_tok();
+        let base_name = name_tok.value;
+
+        let fn_params_tt = grouped[0].1.as_tt();
         let mut param_syms = vec![];
         let mut param_tys = vec![];
 
@@ -71,16 +81,25 @@ impl SemanticAnalyzerPass2 {
             param_tys.push(param_var.ty);
         }
 
-        let opname = name_tok.value;
+        let mut use_raw = false;
+        if let Some(atag) = tag {
+            use_raw = matches!(atag, ATag::RAW);
+        }
 
-        /* name mangling */
-        let fullname = mangling(opname, &param_tys);
+        let fullname;
+        if use_raw {
+            fullname = base_name;
+        }
+        else {
+            /* name mangling */
+            fullname = mangling(base_name, &param_tys);
+        }
 
         if let Some(afndef) = self.find_func_by_name(fullname) {
             AVar::efn_call(afndef, param_syms)
         } else {
             self.write_dialogsis(
-                R::NoMatchedFunc(opname, param_tys),
+                R::NoMatchedFunc(base_name, param_tys),
                 name_tok.span,
             );
 
@@ -281,12 +300,14 @@ impl SemanticAnalyzerPass2 {
     // }
 
     pub(crate) fn analyze_path_expr(&mut self, tt: &TokenTree) -> AVar {
-        let mut sns = tt.subs.iter().peekable();
+        let p = 0;
 
-        let tt = sns.next().unwrap().1.as_tt();
+        debug_assert_eq!(tt[p].0, ST::PathExprSeg);
+
+        let seg0 = &tt[p].1.as_tt();
 
         // analyze path_expr_seg
-        let idtok = tt.subs[0].1.as_tok();
+        let idtok = seg0[0].1.as_tok();
         let id = idtok.value;
 
         self.find_explicit_sym_or_diagnose(id, idtok.span)

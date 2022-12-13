@@ -4,7 +4,6 @@ use super::{
 
 
 
-
 impl Parser {
     pub(crate) fn parse_attrs(&mut self) -> ParseResult2 {
         let mut subs = vec![];

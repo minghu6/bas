@@ -1,12 +1,12 @@
 use indexmap::indexmap;
 use m6coll::KVEntry as Entry;
-use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol};
+use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
 
 use super::{
-    analyze_attrs, analyze_pat_no_top, analyze_ty,
-    aty_int, aty_str, write_diagnosis, A3ttrs, AMod, AScope, ASymDef, AType,
+     analyze_pat_no_top, analyze_ty,
+    aty_int, aty_str, write_diagnosis, AMod, AScope, ASymDef, AType,
     AVal, AVar, AnExtFnDec, ConstVal, ExtSymSet, SemanticError,
-    SemanticErrorReason as R, MIR, TokenTree2, APriType,
+    SemanticErrorReason as R, MIR, TokenTree2, APriType, ATag,
 };
 use crate::{
     codegen::is_implicit_sym,
@@ -161,7 +161,7 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn find_explicit_sym_ty_and_tag(
         &self,
         sym: &Symbol,
-    ) -> Option<(usize, AType)> {
+    ) -> Option<(usize, AVar)> {
         let mut scope = self.cur_scope();
 
         loop {
@@ -181,11 +181,8 @@ impl SemanticAnalyzerPass2 {
         sym: Symbol,
         span: Span,
     ) -> AVar {
-        if let Some((tagid, ty)) = self.find_explicit_sym_ty_and_tag(&sym) {
-            AVar {
-                ty,
-                val: AVal::Var(sym, tagid),
-            }
+        if let Some((_tagid, avar)) = self.find_explicit_sym_ty_and_tag(&sym) {
+            avar
         } else {
             // println!("{:#?}", self.frame_stack());
 
@@ -272,6 +269,7 @@ impl SemanticAnalyzerPass2 {
         sym
     }
 
+    /// Create a local variable (alloc)
     pub(crate) fn create_var(&mut self, sym: Symbol, ty: AType) {
         let fn_alloc =
             self.amod.allocs.get_mut(&self.cur_fn.unwrap()).unwrap();
@@ -286,10 +284,11 @@ impl SemanticAnalyzerPass2 {
         }
 
         fn_alloc.insert((sym, tagid), ty.clone());
+        let val = AVal::Var(sym, tagid);
 
         let scope = self.cur_scope_mut();
 
-        scope.explicit_bindings.push(Entry(sym, (tagid, ty)));
+        scope.explicit_bindings.push(Entry(sym, (tagid, AVar { ty, val })));
     }
 
     pub(crate) fn cast_val(&mut self, varsym: Symbol, ty: AType) -> Symbol {
@@ -408,8 +407,21 @@ impl SemanticAnalyzerPass2 {
         analyze_ty(&mut self.cause_lists, tt)
     }
 
-    #[allow(unused)]
-    pub(crate) fn analyze_attrs(&mut self, tt: &TokenTree) -> A3ttrs {
-        analyze_attrs(&mut self.cause_lists, tt)
+    pub(crate) fn analyze_tag(&mut self, tok: &Token) -> ATag {
+        let s = tok.value_string();
+
+        match s.as_str() {
+            "raw" => {
+                ATag::RAW
+            },
+            _ => {
+                self.write_dialogsis(
+                    R::UnkonwTag,
+                    tok.span
+                );
+
+                ATag::PH
+            }
+        }
     }
 }

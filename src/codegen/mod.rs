@@ -56,7 +56,9 @@ pub(crate) struct CodeGen<'ctx> {
     ess: ExtSymSet,
     config: CompilerConfig,
     blks: Vec<LogicBlock<'ctx>>, // Scope - Basic Block Bindings
+    // dyn set when codegen fn body
     fn_alloc: IndexMap<(Symbol, usize), PointerValue<'ctx>>,
+
     // fn_params: IndexMap<Symbol, BasicValueEnum<'ctx>>,
 
     fpm: PassManager<FunctionValue<'ctx>>,
@@ -77,7 +79,7 @@ impl<'ctx> CodeGen<'ctx> {
             paren: ascope.paren,
             bbs: vec![],
             is_ret: false,  // Be Unkonwn yet
-            local_bindings: IndexMap::with_capacity(
+            value_bindings: IndexMap::with_capacity(
                 ascope.implicit_bindings.len(),
             ),
         }).collect();
@@ -131,7 +133,6 @@ impl<'ctx> CodeGen<'ctx> {
             config,
             blks,
             fn_alloc: indexmap! {},
-            // fn_params: indexmap! {},
             fpm,
             sc: vec![0],
             phi_ret: vec![],
@@ -164,20 +165,7 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self.blks[*self.sc.last().unwrap()]
     }
 
-    // /// Check if cur block is tail block of whole function.
-    // pub(crate) fn is_tail(&self) -> bool {
-    //     let mut cur = self.cur_blk();
-
-    //     while cur.paren.is_some() && cur.paren.unwrap() > 0 {
-    //         if !cur.is_ret { return false; }
-
-    //         cur = &self.blks[cur.paren.unwrap()]
-    //     }
-
-    //     true
-    // }
-
-
+    /// Find value bind in Logic Block recursively
     pub(crate) fn find_sym(
         &self,
         sym: Symbol,
@@ -195,8 +183,8 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn bind_val(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
-        self.cur_blk_mut().bind_val_sym(sym, bv);
+    pub(crate) fn bind_value(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
+        self.cur_blk_mut().value_bindings.insert(sym, bv);
     }
 
     pub(crate) fn assign_var(&mut self, (sym, tagid): (Symbol, usize), bv: BasicValueEnum<'ctx>) {
@@ -259,7 +247,7 @@ impl<'ctx> CodeGen<'ctx> {
 pub(crate) struct LogicBlock<'ctx> {
     pub(crate) paren: Option<usize>,
     pub(crate) bbs: Vec<BasicBlock<'ctx>>,
-    pub(crate) local_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
+    pub(crate) value_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
     pub(crate) is_ret: bool
 }
 
@@ -272,7 +260,7 @@ impl<'ctx> LogicBlock<'ctx> {
         &self,
         q: Symbol,
     ) -> Option<BasicValueEnum<'ctx>> {
-        self.local_bindings.get(&q).cloned()
+        self.value_bindings.get(&q).cloned()
     }
 
     pub(crate) fn in_scope_get_fnval(
@@ -284,11 +272,6 @@ impl<'ctx> LogicBlock<'ctx> {
             None
         }
     }
-
-    pub(crate) fn bind_val_sym(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
-        self.local_bindings.insert(sym, bv);
-    }
-
 }
 
 

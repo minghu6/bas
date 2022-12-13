@@ -1,4 +1,4 @@
-use m6lexerkit::Token;
+use m6lexerkit::{Token, Span};
 use m6parserkit::{parse_infix_expr, BopWrapper, InfixExpr};
 
 use super::{
@@ -11,6 +11,7 @@ impl Parser {
     pub(crate) fn parse_expr(&mut self) -> ParseResult2 {
         let mut expr_units = vec![];
         let mut ops = vec![];
+        let from = self.peek1_t().span().from;
 
         loop {
             let tok1 = self.peek1_t();
@@ -85,9 +86,10 @@ impl Parser {
                 )]));
             }
             // PathExpr | SideEffectExpr
-            else if tok1.check_name("id") {
+            else if tok1.check_names_in(&["id", "tag"]) {
                 let tok2 = self.peek2_t();
 
+                // 一元操作符不应该操作在有路径前缀的符号上
                 if tok2.check_values_in(&["++", "--"]) {
                     ty = ST::SideEffectExpr;
                     tt = SN::T(self.parse_side_effect_expr()?);
@@ -319,7 +321,36 @@ impl Parser {
                 break;
             }
 
-            expr_units.push((ty, tt));
+            if let Some((st, sn)) = expr_units.pop() {
+                if st == ST::PathExpr && ty == ST::GroupedExpr {
+                    expr_units.push((
+                        ST::FunCallExpr,
+                        SN::T(TokenTree { subs: vec![
+                                (st, sn),
+                                (ty, tt)
+                            ]
+                        })
+                    ));
+                }
+                else {
+                    expr_units.push((st, sn));
+                    expr_units.push((ty, tt));
+                }
+            }
+            else {
+                expr_units.push((ty, tt));
+            }
+
+            if expr_units.len() > ops.len() + 1 {
+                // println!("expr units: {:#?}", expr_units);
+
+                let span = Span {
+                    from,
+                    end: self.prev_t().span().end,
+                };
+
+                return Err(R::lack("Binary Operator", "MultiExpr", span));
+            }
         }
 
         if expr_units.is_empty() {
@@ -329,6 +360,12 @@ impl Parser {
         if ops.is_empty() {
             Ok(TokenTree::new(expr_units))
         } else {
+            if ops.len() + 1 != expr_units.len() {
+                println!("Unmathced ops {} - expr_units {}", ops.len(), expr_units.len());
+                println!("{ops:#?}");
+                println!("{expr_units:#?}");
+            }
+
             Ok(map_infix_expr_to_tt(parse_infix_expr(ops, expr_units)))
         }
 
@@ -397,6 +434,14 @@ impl Parser {
     pub(crate) fn parse_path_expr(&mut self) -> ParseResult2 {
         let four = ST::PathExpr;
         let mut subs = vec![];
+
+        if self.peek1_t().check_name("tag") {
+            // println!("tag: {}", self.peek1_t());
+            subs.push((
+                ST::tag,
+                SN::E(self.unchecked_advance())
+            ))
+        }
 
         subs.push((ST::PathExprSeg, SN::T(self.parse_path_expr_seg()?)));
 

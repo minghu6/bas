@@ -8,6 +8,7 @@ use m6lexerkit::{
 use maplit::hashset;
 
 make_token_matcher_rules! {
+    tag       => "[[:alpha:]_][[:alnum:]_]*#",
     id        => "[[:alpha:]_][[:alnum:]_]*",
     attr      => r#"@\w+"#,
 
@@ -103,6 +104,10 @@ pub(crate) fn tokenize(source: &SrcFileInfo) -> TokenizeResult {
             .map(|mut tok| {
                 if tok.check_name("attr") {
                     tok = tok.mapval(&tok.value_string()[1..]);
+                }
+                if tok.check_name("tag") {
+                    let s = &tok.value_string();
+                    tok = tok.mapval(&s[..s.len() - 1]);
                 }
 
                 tok.rename_by_value(&KEY_SET)

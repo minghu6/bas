@@ -9,6 +9,7 @@ use crate::ast_lowering::{ AType, APriType };
 use super::CodeGen;
 
 
+// pub const ID_VEC: &str = "Vec";
 
 
 impl<'ctx> CodeGen<'ctx> {
@@ -53,5 +54,17 @@ impl<'ctx> CodeGen<'ctx> {
             _ => unreachable!("{:#?}", aty),
         }
     }
+
+    pub fn aty_arr_as_ret_type(
+        &self,
+        _aty: &APriType,
+        _d: &u8,
+    ) -> RetTypeEnum<'ctx> {
+        // RetTypeEnum::StructType(get_ctx().opaque_struct_type(ID_VEC))
+        RetTypeEnum::PointerType(
+            get_ctx().i8_type().ptr_type(AddressSpace::Generic)
+        )
+    }
+
 }
 

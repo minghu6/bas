@@ -29,14 +29,20 @@ impl SemanticAnalyzerPass2 {
         /* Unpack Param (into body) */
 
         let scope_idx = self.push_new_scope();
+        self.sc.push(scope_idx);
 
         if let Some(afn) = self.amod.afns.get(&name) {
             let params = afn.params.clone();
 
             for (i, param_pat) in params.into_iter().enumerate() {
+                let aval = AVal::FnParam(i as u32);
+
                 self.cur_scope_mut()
                     .explicit_bindings
-                    .push(KVEntry(param_pat.formal, (0, param_pat.ty.clone())));
+                    .push(KVEntry(
+                        param_pat.formal,
+                        (0, AVar { ty: param_pat.ty.clone(), val: aval })
+                    ));
 
                 self.cur_scope_mut().mirs.push(MIR::bind_value(
                     param_pat.formal,
@@ -50,6 +56,7 @@ impl SemanticAnalyzerPass2 {
         else {
             unreachable!("There must be definition by Pass1 {}", sym2str(name))
         }
+        self.sc.pop();
 
         // body to stmts
         debug_assert_eq!(body[0].0, ST::Stmts);

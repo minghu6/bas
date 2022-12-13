@@ -32,12 +32,16 @@ impl RunCompiler {
 
         let tt = parse(tokens, &src)?;
 
+        // println!("tt: {tt:#?}");
+
         let Pass1Export { src, tt2, amod, ess } =
             SemanticAnalyzerPass1::run(src, tt, ess)?;
 
         #[allow(unused)]
         let Pass2Export { src, amod, ess } =
             SemanticAnalyzerPass2::run(src, tt2, amod, ess)?;
+
+        // println!("amod: {amod:#?}");
 
         CodeGen::run(amod, ess, config)?;
 
@@ -50,6 +54,8 @@ impl RunCompiler {
 
         let tokens = tokenize(&core_src)?;
         let tt = parse(tokens, &core_src)?;
+
+        // println!("core tt: {tt:#?}");
 
         #[allow(unused)]
         let Pass1Export { src, tt2, amod, ess } =

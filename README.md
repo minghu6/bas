@@ -1,4 +1,11 @@
 
 ## Demo
 
-make testexp0
+[Demo files](examples/)
+
+### Run
+    make testexp0
+
+## 文档
+
+[Specification](spec/)

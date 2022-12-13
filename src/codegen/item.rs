@@ -1,4 +1,3 @@
-use indexmap::indexmap;
 use inkwellkit::{config::OptLv, get_ctx, module::Linkage};
 use itertools::Itertools;
 use m6lexerkit::{sym2str, Symbol};
@@ -79,7 +78,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // push into fn_alloc
         let fn_alloc = self.amod.allocs.get(&name).unwrap();
-        self.fn_alloc = indexmap! {};
+        self.fn_alloc.clear();
 
         for ((sym, tagid), ty) in fn_alloc.iter() {
             let var = self.builder.build_alloca(

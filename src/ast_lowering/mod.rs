@@ -67,6 +67,7 @@ pub enum SemanticErrorReason {
     #[allow(unused)]
     UnmatchedType(AType, AType),
     UnkonwnType,
+    UnkonwTag,
     NoMatchedFunc(Symbol, Vec<AType>), // basename, tys
     DuplicateAttr(Symbol, A3ttrVal),
     UnknownAttr(Symbol),
@@ -177,6 +178,12 @@ impl std::fmt::Debug for SemanticError {
                         "Unknown Attr annotation {}",
                         sym2str(*attrsym)
                     )
+                },
+                R::UnkonwTag => {
+                    writeln!(
+                        f,
+                        "Unknown Tag"
+                    )
                 }
             }?;
             writeln!(f)?;
@@ -237,21 +244,16 @@ impl SN {
 ////////////////////////////////////////
 //// Function shared betweem passes
 
-pub(crate) fn get_fullname_by_fn_header(
+pub(crate) fn calc_fullname(
     base: Symbol,
     params: &[AParamPat],
 ) -> Symbol {
-    // 作为特殊的入口，main最多只有一个实现
-    if sym2str(base) == "main".to_owned() {
-        base
-    } else {
-        let tys = params
-            .into_iter()
-            .map(|param| param.ty.clone())
-            .collect_vec();
+    let tys = params
+        .into_iter()
+        .map(|param| param.ty.clone())
+        .collect_vec();
 
-        mangling(base, &tys)
-    }
+    mangling(base, &tys)
 }
 
 pub(crate) fn analyze_pat_no_top(tt: &TokenTree) -> Symbol {
