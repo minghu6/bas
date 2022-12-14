@@ -41,7 +41,7 @@ impl<'ctx> CodeGen<'ctx> {
             },
             AType::AA(_) => todo!(),
             AType::Void => void_t.into(),
-            AType::PH => unreachable!(),
+            AType::PH | AType::Never => unreachable!(),
         }
     }
 

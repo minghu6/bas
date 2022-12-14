@@ -99,6 +99,8 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(bb_terminal);
         let afndec = self.amod.afns.get(&name).unwrap();
 
+        // println!("phi_ret: {:#?}", self.phi_ret);
+
         let ret = if self.phi_ret.is_empty() {
             None
         }

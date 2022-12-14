@@ -7,8 +7,8 @@ fn main() -> int {
 
     count = 4;
 
-    let tmp = 2 + 3 * 4 - 2;
-    !(echo tmp: $tmp);
+    #let tmp = 2 + 3 * 4 - 2;
+    #!(echo tmp: $tmp);
 
     loop {
         if count < 10 {

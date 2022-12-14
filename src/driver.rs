@@ -5,7 +5,9 @@ use m6lexerkit::SrcFileInfo;
 
 use crate::{
     ast_lowering::{
-        pass1::{SemanticAnalyzerPass1, Pass1Export}, pass2::{SemanticAnalyzerPass2, Pass2Export}, AModExp, ExtSymSet,
+        pass1::{Pass1Export, SemanticAnalyzerPass1},
+        pass2::{Pass2Export, SemanticAnalyzerPass2},
+        AModExp, ExtSymSet,
     },
     codegen::CodeGen,
     env::boostrap_dir,
@@ -34,8 +36,12 @@ impl RunCompiler {
 
         // println!("tt: {tt:#?}");
 
-        let Pass1Export { src, tt2, amod, ess } =
-            SemanticAnalyzerPass1::run(src, tt, ess)?;
+        let Pass1Export {
+            src,
+            tt2,
+            amod,
+            ess,
+        } = SemanticAnalyzerPass1::run(src, tt, ess)?;
 
         #[allow(unused)]
         let Pass2Export { src, amod, ess } =
@@ -58,8 +64,16 @@ impl RunCompiler {
         // println!("core tt: {tt:#?}");
 
         #[allow(unused)]
-        let Pass1Export { src, tt2, amod, ess } =
-            SemanticAnalyzerPass1::run(core_src, tt, ExtSymSet { mods: vec![] })?;
+        let Pass1Export {
+            src,
+            tt2,
+            amod,
+            ess,
+        } = SemanticAnalyzerPass1::run(
+            core_src,
+            tt,
+            ExtSymSet { mods: vec![] },
+        )?;
 
         Ok(amod.export())
     }

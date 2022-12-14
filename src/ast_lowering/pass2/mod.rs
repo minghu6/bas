@@ -30,8 +30,12 @@ pub struct SemanticAnalyzerPass2 {
 
     amod: AMod,
     ess: ExtSymSet,
+
+    /* Dynamic Scope */
+
     sc: Vec<usize>, // Scope Counter,
     cur_fn: Option<Symbol>,
+
     cause_lists: Vec<(R, Span)>,
 }
 
@@ -111,7 +115,7 @@ impl SemanticAnalyzerPass2 {
     fn push_single_value_scope(&mut self, avar: AVar) -> usize {
         let scope_idx = self.push_new_scope();
         let scope = &mut self.amod.scopes[scope_idx];
-        scope.ret = Some(avar);
+        scope.tail = avar;
 
         scope_idx
     }
@@ -321,8 +325,7 @@ impl SemanticAnalyzerPass2 {
                     },
                     AType::Arr(_, _) => todo!(),
                     AType::AA(_) => todo!(),
-                    AType::Void => todo!(),
-                    AType::PH => todo!(),
+                    AType::Never | AType::PH | AType::Void => unreachable!()
                 };
 
                 let fullname = str2sym(fullname);
@@ -395,6 +398,42 @@ impl SemanticAnalyzerPass2 {
         sym_vec
     }
 
+    pub(super) fn build_ret(&mut self, avar: AVar, span: Span) -> AVar {
+        self.cur_scope_mut().ret_var = Some(avar.clone());
+
+        let fname = self.cur_fn.unwrap();
+        let afndec = self
+            .find_func_by_name(fname)
+            .unwrap();
+
+        let retty = avar.ty.clone();
+        let retsym;
+
+        if retty != AType::Void {
+            // calc implicit symbol
+            retsym = Some(self.bind_value(avar));
+        }
+        else {
+            retsym = None;
+        }
+
+        if retty != AType::Never && retty != afndec.ret {
+            self.write_dialogsis(
+                R::UnmatchedType(
+                    afndec.ret.clone(),
+                    retty,
+                    format!("Function {fname:?}")
+                ),
+                span
+            );
+
+            return AVar::undefined();
+        }
+
+        AVar { ty: AType::Void, val: AVal::Return(retsym) }
+
+    }
+
 
     ////////////////////////////////////////////////////////////////////////////////
     //// Other Analyze method
@@ -425,3 +464,4 @@ impl SemanticAnalyzerPass2 {
         }
     }
 }
+

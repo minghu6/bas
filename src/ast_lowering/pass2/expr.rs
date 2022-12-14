@@ -376,17 +376,17 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn analyze_return_expr(&mut self, tt: &TokenTree) -> AVar {
         let mut sns = tt.subs.iter().peekable();
 
-        let val;
+        let (st, sn) = sns.next().unwrap();
+        debug_assert_eq!(*st, ST::ret);
+
         if let Some((_st, sn)) = sns.next() {
             let retvar = self.analyze_expr(sn.as_tt());
-            val = AVal::Return(Some(self.bind_value(retvar)));
+            self.build_ret(
+                retvar,
+                sn.span()
+            )
         } else {
-            val = AVal::Return(None);
-        }
-
-        AVar {
-            ty: AType::Void,
-            val,
+            self.build_ret(AVar::void(), sn.span())
         }
     }
 
@@ -467,7 +467,7 @@ impl SemanticAnalyzerPass2 {
         }
 
         // Check if_exprs and else ret type
-        let if_ty = &self.amod.scopes[if_exprs[0].1].ret().ty;
+        let if_ty = &self.amod.scopes[if_exprs[0].1].as_var().ty;
         let mut conds = if_exprs.iter().skip(1);
         let mut oths = vec![];
 
@@ -475,8 +475,8 @@ impl SemanticAnalyzerPass2 {
             let (_sym, idx) = conds.next().unwrap();
             let scope = &self.amod.scopes[*idx];
 
-            if scope.ret().ty != *if_ty {
-                oths.push(scope.ret().ty);
+            if scope.as_var().ty != *if_ty {
+                oths.push(scope.as_var().ty);
             }
         }
 
@@ -499,31 +499,53 @@ impl SemanticAnalyzerPass2 {
     }
 
     pub(crate) fn analyze_block_expr(&mut self, tt: &TokenTree) -> AVar {
+        debug_assert!(tt.len() >= 2);
+        debug_assert_eq!(tt[0].0, ST::lbrace);
+        debug_assert_eq!(tt[tt.len() - 1].0, ST::rbrace);
+
         let scope_idx = self.push_new_scope();
-        self.do_analyze_block_with_scope(scope_idx, &tt.subs[0].1.as_tt());
+
+        self.do_analyze_block_with_scope(scope_idx, &tt[1].1.as_tt());
 
         AVar {
-            ty: self.amod.scopes[scope_idx].ret().ty,
+            ty: self.amod.scopes[scope_idx].as_var().ty,
             val: AVal::BlockExpr(scope_idx),
         }
     }
 
     pub(crate) fn analyze_infi_loop_expr(&mut self, tt: &TokenTree) -> AVar {
-        let var = self.analyze_block_expr(tt.subs[0].1.as_tt());
+        let var = self.analyze_block_expr(tt[0].1.as_tt());
+        let scope_id = var.val.as_block_expr_idx();
 
-        let val = AVal::InfiLoopExpr(var.val.as_block_expr_idx());
+        self.sc.push(scope_id);
+
+        if let Some(ref avar) = self.cur_scope().break_var {
+            self.cur_scope_mut().tail.ty = avar.ty.clone();
+        }
+        else {
+            self.cur_scope_mut().tail.ty = AType::Never;
+        }
+        let ty = self.cur_scope().as_var().ty;
+
+        self.sc.pop();
+
+        let val = AVal::InfiLoopExpr(scope_id);
 
         AVar {
-            ty: AType::Void,
+            ty,
             val,
         }
     }
 
     pub(crate) fn analyze_break_expr(&mut self, _tt: &TokenTree) -> AVar {
-        AVar {
+        let var = AVar {
             ty: AType::Void,
             val: AVal::Break,
-        }
+        };
+
+        self.cur_scope_mut().break_var = Some(var.clone());
+
+        var
     }
 
     pub(crate) fn analyze_continue_expr(&mut self, _tt: &TokenTree) -> AVar {
@@ -540,15 +562,12 @@ impl SemanticAnalyzerPass2 {
     ) {
         self.sc.push(scope_idx);
 
-        // dbg!(&tt);
-
-        for (ty, sn) in tt.subs.iter() {
+        for (ty, sn) in tt.iter() {
             if *ty == ST::Stmt {
                 self.do_analyze_stmt(sn.as_tt());
             } else if *ty == ST::Expr {
                 // Stmts ret value
-                let retval = self.analyze_expr(sn.as_tt());
-                self.cur_scope_mut().ret = Some(retval);
+                self.cur_scope_mut().tail = self.analyze_expr(sn.as_tt());
                 break;
             } else {
                 unreachable!("{:#?}", ty)

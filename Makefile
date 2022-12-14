@@ -9,11 +9,11 @@ copybin: build
 getbasc: build copybin
 
 testexp0: getbasc
-	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath exp0 -O2
+	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath -O2 exp0
 	@ ./exp0
 
 testexp1: getbasc
-	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath exp1 -O2
+	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath exp1 -O2 -t lib
 	@ ./exp1
 
 testcodegen:

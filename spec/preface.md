@@ -36,8 +36,7 @@ BlockExpr:
   | <lbrace> [Stmts] <rbrace>
 
 Stmts:
-  | [Stmt]+
-  | [Stmt]* [ExprBlk]
+  | [Stmt]* [ExprBlk]?
 
 Stmt:
   | [Item]

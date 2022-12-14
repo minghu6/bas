@@ -64,8 +64,8 @@ pub enum SemanticErrorReason {
     },
     UnknownSymBinding(Symbol),
     CantCastType(AType, AType),
-    #[allow(unused)]
-    UnmatchedType(AType, AType),
+    /// expect, found, for "..."
+    UnmatchedType(AType, AType, String),
     UnkonwnType,
     UnkonwTag,
     NoMatchedFunc(Symbol, Vec<AType>), // basename, tys
@@ -120,7 +120,7 @@ impl std::fmt::Debug for SemanticError {
                 "{} cause-{:003} {}",
                 "-".to_string().repeat(34),
                 i + 1,
-                "-".to_string().repeat(34),
+                "-".to_string().repeat(36),
             )?;
             writeln!(f)?;
 
@@ -154,10 +154,10 @@ impl std::fmt::Debug for SemanticError {
                 R::CantCastType(from, to) => {
                     writeln!(f, "Can't cast {:?} into {:?}:\n", from, to)
                 }
-                R::UnmatchedType(var, val) => writeln!(
+                R::UnmatchedType(expect, found, four) => writeln!(
                     f,
-                    "Unmatched Type variable: {:?}, value: {:?}:\n",
-                    var, val
+                    "Expect Type {:?}, however found {:?} for {}:\n",
+                    expect, found, four
                 ),
                 R::UnkonwnType => writeln!(f, "Unknown Type:\n"),
                 R::NoMatchedFunc(basename, tys) => {
@@ -209,30 +209,6 @@ impl std::error::Error for SemanticError {}
 impl TokenTree {
     pub(crate) fn move_elem(&mut self, i: usize) -> (ST, SN) {
         std::mem::replace(&mut self.subs[i], (ST::semi, SN::E(Token::eof())))
-    }
-}
-
-
-impl SN {
-    pub(crate) fn as_tt(&self) -> &TokenTree {
-        match self {
-            Self::T(ref tt) => tt,
-            SN::E(_) => unreachable!("{:?}", self),
-        }
-    }
-
-    pub(crate) fn into_tt(self) -> TokenTree {
-        match self {
-            Self::T(tt) => tt,
-            SN::E(_) => unreachable!("{:?}", self),
-        }
-    }
-
-    pub(crate) fn as_tok(&self) -> &Token {
-        match self {
-            Self::T(_) => unreachable!("{:?}", self),
-            Self::E(ref tok) => tok,
-        }
     }
 }
 

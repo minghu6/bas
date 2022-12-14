@@ -59,8 +59,45 @@ impl SemanticAnalyzerPass2 {
         self.sc.pop();
 
         // body to stmts
-        debug_assert_eq!(body[0].0, ST::Stmts);
-        self.do_analyze_block_with_scope(scope_idx, body[0].1.as_tt());
+        debug_assert_eq!(body[0].0, ST::lbrace);
+        debug_assert_eq!(body[1].0, ST::Stmts);
+
+        self.do_analyze_block_with_scope(scope_idx, body[1].1.as_tt());
+
+        /* Ensure tail return if no Never type */
+        self.sc.push(scope_idx);
+
+        if let Some(mir) = self.cur_scope_mut().mirs.last()
+           && matches!(mir.val, AVal::Return(..))
+        {
+            // do noting
+        }
+        else if self.cur_scope().as_var().ty == AType::Never {
+            // do nothing
+        }
+        else {
+            let stmts = body[1].1.as_tt();
+            let span;
+            if let Some((_st, sn)) = stmts.subs.last() {
+                span = sn.span();
+            }
+            else {
+                span = body[0].1.as_tok().span;
+            }
+
+            let tail_return_avar = self.build_ret(
+                self.cur_scope().tail.clone(),
+                span
+            );
+            let tail_return_mir = MIR::bind_value(
+                self.cur_scope().tmp_name(),
+                tail_return_avar
+            );
+            self.cur_scope_mut().mirs.push(tail_return_mir);
+        }
+
+        self.sc.pop();
+
 
         let val = AVal::DefFn {
             name,

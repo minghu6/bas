@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use indexmap::{ IndexMap, indexmap };
+use indexmap::{indexmap, IndexMap};
 use inkwellkit::{
     basic_block::BasicBlock,
     builder::Builder,
@@ -11,9 +11,9 @@ use inkwellkit::{
     values::{BasicValueEnum, FunctionValue, PointerValue},
     VMMod,
 };
-use m6lexerkit::{sym2str, Symbol};
+use m6lexerkit::{sym2str, Symbol, str2sym};
 
-use crate::ast_lowering::{AMod, AScope, AVar, AVal, ExtSymSet};
+use crate::ast_lowering::{AMod, AScope, AVal, AVar, ExtSymSet};
 
 pub(crate) mod expr;
 pub(crate) mod item;
@@ -60,12 +60,13 @@ pub(crate) struct CodeGen<'ctx> {
     fn_alloc: IndexMap<(Symbol, usize), PointerValue<'ctx>>,
 
     // fn_params: IndexMap<Symbol, BasicValueEnum<'ctx>>,
-
     fpm: PassManager<FunctionValue<'ctx>>,
     sc: Vec<usize>,
 
     phi_ret: Vec<(BasicValueEnum<'ctx>, BasicBlock<'ctx>)>,
-    break_to: Option<BasicBlock<'ctx>>, // loop next
+
+    // FIXME: 应该附着在逻辑块上
+    break_to: Option<BasicBlock<'ctx>>,
     continue_to: Option<BasicBlock<'ctx>>,
     has_ret: bool,
 
@@ -73,36 +74,53 @@ pub(crate) struct CodeGen<'ctx> {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-    pub(crate) fn run(amod: AMod, ess: ExtSymSet, config: CompilerConfig) -> CodeGenResult {
+    pub(crate) fn run(
+        amod: AMod,
+        ess: ExtSymSet,
+        config: CompilerConfig,
+    ) -> CodeGenResult {
+        if matches!(config.target_type, TargetType::Bin) {
+            if !amod.afns.contains_key(&str2sym("main")) {
+                return Err(CodeGenError {
+                    msg: format!("No entry(main) found for {:?}", amod.name),
+                });
+            }
+        }
+
         let vmmod = VMMod::new(&sym2str(amod.name));
-        let mut blks: Vec<LogicBlock> = amod.scopes.iter().map(|ascope| LogicBlock {
-            paren: ascope.paren,
-            bbs: vec![],
-            is_ret: false,  // Be Unkonwn yet
-            value_bindings: IndexMap::with_capacity(
-                ascope.implicit_bindings.len(),
-            ),
-        }).collect();
+        let mut blks: Vec<LogicBlock> = amod
+            .scopes
+            .iter()
+            .map(|ascope| LogicBlock {
+                paren: ascope.paren,
+                bbs: vec![],
+                is_ret: false, // Be Unkonwn yet
+                value_bindings: IndexMap::with_capacity(
+                    ascope.implicit_bindings.len(),
+                ),
+            })
+            .collect();
 
         /* Set `is_ret` attribute of LogicBlock */
         let mut retval_scope = vec![];
 
         for ascope in amod.scopes.iter() {
-            if let Some(AVar { ty: _, val }) = &ascope.ret {
-                match val {
-                    AVal::IfBlock { if_exprs, else_blk } => {
-                        for (_, idx) in if_exprs.into_iter() {
-                            retval_scope.push(*idx);
-                        }
-                        if let Some(idx) = else_blk {
-                            retval_scope.push(*idx);
-                        }
-                    },
-                    AVal::InfiLoopExpr(idx) => { retval_scope.push(*idx); },
-                    AVal::BlockExpr(idx) => { retval_scope.push(*idx) },
+            let AVar { ty: _, val } = &ascope.tail;
 
-                    _ => unreachable!("{:#?}", val),
+            match val {
+                AVal::IfBlock { if_exprs, else_blk } => {
+                    for (_, idx) in if_exprs.into_iter() {
+                        retval_scope.push(*idx);
+                    }
+                    if let Some(idx) = else_blk {
+                        retval_scope.push(*idx);
+                    }
                 }
+                AVal::InfiLoopExpr(idx) => {
+                    retval_scope.push(*idx);
+                }
+                AVal::BlockExpr(idx) => retval_scope.push(*idx),
+                _ => (),
             }
         }
 
@@ -123,7 +141,6 @@ impl<'ctx> CodeGen<'ctx> {
         fpm.add_tail_call_elimination_pass();
 
         fpm.initialize();
-        // Self::include_core(&vmmod.module);
 
 
         let mut it = Self {
@@ -147,6 +164,10 @@ impl<'ctx> CodeGen<'ctx> {
                 it.gen_mod();
                 it.gen_file()?;
             },
+            TargetType::ReLoc => {
+                it.gen_mod();
+                it.gen_file()?;
+            },
             _ => unimplemented!(),
         }
 
@@ -165,7 +186,7 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self.blks[*self.sc.last().unwrap()]
     }
 
-    /// Find value bind in Logic Block recursively
+    /// Find value bind in Logic Block upwards
     pub(crate) fn find_sym(
         &self,
         sym: Symbol,
@@ -183,25 +204,34 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn bind_value(&mut self, sym: Symbol, bv: BasicValueEnum<'ctx>) {
+    pub(crate) fn bind_value(
+        &mut self,
+        sym: Symbol,
+        bv: BasicValueEnum<'ctx>,
+    ) {
         self.cur_blk_mut().value_bindings.insert(sym, bv);
     }
 
-    pub(crate) fn assign_var(&mut self, (sym, tagid): (Symbol, usize), bv: BasicValueEnum<'ctx>) {
+    pub(crate) fn assign_var(
+        &mut self,
+        (sym, tagid): (Symbol, usize),
+        bv: BasicValueEnum<'ctx>,
+    ) {
         if let Some(ptr) = self.fn_alloc.get(&(sym, tagid)) {
             self.builder.build_store(*ptr, bv);
-        }
-        else {
+        } else {
             unreachable!("sym: {:?}, tagid: {}", sym, tagid)
         }
-
     }
 
     pub(crate) fn push_bb(&mut self, scope_idx: usize, bb: BasicBlock<'ctx>) {
         self.blks[scope_idx].bbs.push(bb);
     }
 
-    pub(crate) fn insert_terminal_bb(&mut self, fnval: FunctionValue<'ctx>) -> BasicBlock<'ctx> {
+    pub(crate) fn insert_terminal_bb(
+        &mut self,
+        fnval: FunctionValue<'ctx>,
+    ) -> BasicBlock<'ctx> {
         let blk = get_ctx().append_basic_block(fnval, "");
         self.push_bb(*self.sc.last().unwrap(), blk);
         blk
@@ -226,8 +256,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             if let Some(paren_idx) = lblk.paren {
                 lblk = &self.blks[paren_idx];
-            }
-            else {
+            } else {
                 break None;
             }
         }
@@ -238,8 +267,6 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.build_unconditional_branch(bb);
         self.builder.position_at_end(bb);
     }
-
-
 }
 
 
@@ -248,7 +275,7 @@ pub(crate) struct LogicBlock<'ctx> {
     pub(crate) paren: Option<usize>,
     pub(crate) bbs: Vec<BasicBlock<'ctx>>,
     pub(crate) value_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
-    pub(crate) is_ret: bool
+    pub(crate) is_ret: bool,
 }
 
 pub(crate) fn is_implicit_sym(sym: Symbol) -> bool {
@@ -256,16 +283,15 @@ pub(crate) fn is_implicit_sym(sym: Symbol) -> bool {
 }
 
 impl<'ctx> LogicBlock<'ctx> {
-    pub(crate) fn in_scope_find_val_sym(  // Value symbol or whose alias is implicit symbol
+    pub(crate) fn in_scope_find_val_sym(
+        // Value symbol or whose alias is implicit symbol
         &self,
         q: Symbol,
     ) -> Option<BasicValueEnum<'ctx>> {
         self.value_bindings.get(&q).cloned()
     }
 
-    pub(crate) fn in_scope_get_fnval(
-        &self,
-    ) -> Option<FunctionValue<'ctx>> {
+    pub(crate) fn in_scope_get_fnval(&self) -> Option<FunctionValue<'ctx>> {
         if let Some(blk) = self.bbs.last() {
             blk.get_parent()
         } else {
@@ -305,13 +331,11 @@ pub(crate) fn sh_obj_config(debug: bool, path: PathBuf) -> CompilerConfig {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{
-        codegen::sh_llvm_config, driver::RunCompiler,
-    };
+    use crate::{codegen::sh_llvm_config, driver::RunCompiler};
 
     #[test]
     fn test_codegen() -> Result<(), Box<dyn std::error::Error>> {
-        let path = PathBuf::from("./examples/exp1.bath");
+        let path = PathBuf::from("./examples/exp0.bath");
 
         RunCompiler::new(&path, sh_llvm_config(true))?;
 

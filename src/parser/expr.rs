@@ -424,9 +424,15 @@ impl Parser {
         let four = ST::BlockExpr;
         let mut subs = vec![];
 
-        self.expect_eat_tok1_t(ST::lbrace, four)?;
-        subs.push((ST::Stmts, SN::T(self.parse_stmts()?)));
-        self.expect_eat_tok1_t(ST::rbrace, four)?;
+        subs.push(
+            (ST::lbrace, SN::E(self.expect_eat_tok1_t(ST::lbrace, four)?))
+        );
+        subs.push(
+            (ST::Stmts, SN::T(self.parse_stmts()?))
+        );
+        subs.push(
+            (ST::rbrace, SN::E(self.expect_eat_tok1_t(ST::rbrace, four)?))
+        );
 
         Ok(TokenTree::new(subs))
     }
@@ -480,9 +486,10 @@ impl Parser {
 
     pub(crate) fn parse_return_expr(&mut self) -> ParseResult2 {
         let four = ST::ReturnExpr;
-        let mut subs = vec![];
+        let mut subs = vec![
+            (ST::ret, SN::E(self.expect_eat_tok1_t(ST::r#return, four)?))
+        ];
 
-        self.expect_eat_tok1_t(ST::r#return, four)?;
         if !self.peek1_t().check_names_in(&["semi", "rbrace"]) {
             subs.push((ST::Expr, SN::T(self.parse_expr()?)));
         }

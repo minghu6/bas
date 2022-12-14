@@ -1,16 +1,20 @@
-use std::{fmt::Debug, ops::{Index, IndexMut}, slice::SliceIndex};
+use std::{
+    fmt::Debug,
+    ops::{Index, IndexMut},
+    slice::SliceIndex,
+};
 
-use m6lexerkit::{SrcFileInfo, Token, Span};
+use m6lexerkit::{Span, SrcFileInfo, Token};
 use m6parserkit::gen_syntax_enum;
 
 use crate::ref_source;
 
+mod attr;
 mod expr;
 mod item;
 mod pat;
 mod stmt;
 mod ty;
-mod attr;
 
 
 gen_syntax_enum! [ pub SyntaxType |
@@ -121,69 +125,14 @@ gen_syntax_enum! [ pub SyntaxType |
 pub struct TokenTree {
     pub(crate) subs: Vec<(SyntaxType, SyntaxNode)>,
 }
-pub use SyntaxType as ST;
 pub(crate) use SyntaxNode as SN;
-
-impl TokenTree {
-    pub(super) fn new(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
-        Self { subs }
-    }
-
-    pub(super) fn len(&self) -> usize {
-        self.subs.len()
-    }
-
-    // pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
-    //     self.last_nth(1)
-    // }
-
-    pub(super) fn iter(&self) -> impl Iterator<Item=&(ST, SN)> {
-        self.subs.iter()
-    }
-}
-
-impl std::fmt::Debug for TokenTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dbs = &mut f.debug_tuple("=>");
-
-        for (ty, sn) in self.subs.iter() {
-            dbs = dbs.field(ty);
-
-            match &*sn {
-                SyntaxNode::T(tt) => dbs = dbs.field(&tt),
-                SyntaxNode::E(tok) => dbs = dbs.field(&tok),
-            }
-        }
-
-        dbs.finish()
-    }
-}
-
-impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> Index<I> for TokenTree {
-    type Output = I::Output;
-
-    fn index(&self, index: I) -> &Self::Output {
-        Index::index(&self.subs, index)
-    }
-}
-
-impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> IndexMut<I> for TokenTree {
-    fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        IndexMut::index_mut(&mut self.subs, index)
-    }
-}
+pub use SyntaxType as ST;
 
 
 #[derive(Debug)]
 pub enum SyntaxNode {
     T(TokenTree),
     E(Token),
-}
-
-impl SyntaxNode {
-    // pub(super) fn from_t(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
-    //     Self::T(TokenTree { subs })
-    // }
 }
 
 
@@ -218,7 +167,137 @@ pub enum ParseErrorReason {
     Lack {
         lack: String,
         four: String,
-        span: Span
+        span: Span,
+    },
+}
+
+
+
+impl SN {
+    pub(crate) fn as_tt(&self) -> &TokenTree {
+        match self {
+            Self::T(ref tt) => tt,
+            SN::E(_) => unreachable!("{:?}", self),
+        }
+    }
+
+    pub(crate) fn into_tt(self) -> TokenTree {
+        match self {
+            Self::T(tt) => tt,
+            SN::E(_) => unreachable!("{:?}", self),
+        }
+    }
+
+    pub(crate) fn as_tok(&self) -> &Token {
+        match self {
+            Self::T(_) => unreachable!("{:?}", self),
+            Self::E(ref tok) => tok,
+        }
+    }
+
+    pub(crate) fn tok_1st(&self) -> Option<&Token> {
+        match self {
+            Self::T(tt) => tt.tok_1st(),
+            Self::E(tok) => Some(tok),
+        }
+    }
+
+    pub(crate) fn tok_last(&self) -> Option<&Token> {
+        match self {
+            Self::T(tt) => tt.tok_last(),
+            Self::E(tok) => Some(tok),
+        }
+    }
+
+    pub(crate) fn span(&self) -> Span {
+        match self {
+            Self::T(tt) => tt.span(),
+            Self::E(tok) => tok.span,
+        }
+    }
+}
+
+
+impl TokenTree {
+    pub(super) fn new(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
+        Self { subs }
+    }
+
+    pub(super) fn len(&self) -> usize {
+        self.subs.len()
+    }
+
+    // pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
+    //     self.last_nth(1)
+    // }
+
+    pub(super) fn iter(&self) -> impl Iterator<Item = &(ST, SN)> {
+        self.subs.iter()
+    }
+
+    pub(crate) fn tok_1st(&self) -> Option<&Token> {
+        for (_, sn) in self.subs.iter() {
+            if let Some(ref tok) = sn.tok_1st() {
+                return Some(tok);
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn tok_last(&self) -> Option<&Token> {
+        for (_, sn) in self.subs.iter().rev() {
+            if let Some(ref tok) = sn.tok_last() {
+                return Some(tok);
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn span(&self) -> Span {
+        if let Some(tok_1st) = self.tok_1st() &&
+           let Some(tok_last) = self.tok_last()
+        {
+            Span {
+                from: tok_1st.span.from,
+                end: tok_last.span.end,
+            }
+        }
+        else {
+            Span::default()
+        }
+    }
+}
+
+impl std::fmt::Debug for TokenTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dbs = &mut f.debug_tuple("=>");
+
+        for (ty, sn) in self.subs.iter() {
+            dbs = dbs.field(ty);
+
+            match &*sn {
+                SyntaxNode::T(tt) => dbs = dbs.field(&tt),
+                SyntaxNode::E(tok) => dbs = dbs.field(&tok),
+            }
+        }
+
+        dbs.finish()
+    }
+}
+
+impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> Index<I> for TokenTree {
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(&self.subs, index)
+    }
+}
+
+impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> IndexMut<I> for TokenTree {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(&mut self.subs, index)
     }
 }
 
@@ -261,7 +340,11 @@ impl ParseErrorReason {
                 found,
             } => found.span,
             Self::Unrecognized { four: _, found } => found.span,
-            Self::Lack { lack: _, four: _, span } => *span
+            Self::Lack {
+                lack: _,
+                four: _,
+                span,
+            } => *span,
         }
     }
 
@@ -269,7 +352,7 @@ impl ParseErrorReason {
         Self::Lack {
             lack: lack.to_string(),
             four: four.to_string(),
-            span
+            span,
         }
     }
 }
@@ -286,7 +369,7 @@ impl Debug for ParseErrorReason {
             }
             Self::Unrecognized { four, found } => {
                 writeln!(f, "Unrecognized token {found:?} when parsing {four}")
-            },
+            }
             Self::Lack { lack, four, .. } => {
                 writeln!(f, "Lack {lack} for {four} ")
             }
@@ -377,10 +460,7 @@ impl Parser {
         let mut subs = vec![];
 
         while !self.is_end() {
-            subs.push((
-                SyntaxType::Item,
-                SyntaxNode::T(self.parse_item()?),
-            ))
+            subs.push((SyntaxType::Item, SyntaxNode::T(self.parse_item()?)))
         }
 
         Ok(TokenTree { subs })

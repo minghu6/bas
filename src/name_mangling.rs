@@ -18,6 +18,7 @@ impl AType {
             Self::AA(_) => todo!(),
             Self::Void => format!("()"),
             Self::PH => format!("???"),
+            Self::Never => format!("!")
         }
     }
     #[allow(unused)]

@@ -94,6 +94,8 @@ pub enum AType {
     #[allow(unused)]
     AA(Vec<APriType>), // Associative Array (str index)
     Void,
+    /// Rust type "!"
+    Never,
     PH, // Phantom or Place Holder anyway, used for multiple diagnosis
 }
 
@@ -138,7 +140,8 @@ pub(crate) enum AVal {
         else_blk: Option<usize>,        // else block (scope idx)
     },
     InfiLoopExpr(usize),
-    BlockExpr(usize), // Scope idx
+    /// Scope idx
+    BlockExpr(usize),
     FnParam(u32),
     FnCall {
         call_fn: Symbol,
@@ -173,11 +176,18 @@ pub(crate) struct AVar {
 pub(crate) struct AScope {
     pub(crate) paren: Option<usize>,
     /// val: tagid, ty; tagid 区别于函数内所有同名不同作用域的局部变量
+    ///
+    /// 局部变量/函数参数
     pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AVar)>>,
     /// idx - mir index
+    ///
+    /// 语法结构中间值
     pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
     pub(crate) mirs: Vec<MIR>,
-    pub(crate) ret: Option<AVar>,
+
+    pub(crate) tail: AVar,
+    pub(crate) break_var: Option<AVar>,
+    pub(crate) ret_var: Option<AVar>
 }
 
 
@@ -367,11 +377,12 @@ impl AScope {
         str2sym(&format!("!__tmp_{}", self.implicit_bindings.len()))
     }
 
-    pub(crate) fn ret(&self) -> AVar {
-        if let Some(ret) = self.ret.clone() {
-            ret
-        } else {
-            AVar::void()
+    pub(crate) fn as_var(&self) -> AVar {
+        if let Some(ref break_var) = self.break_var {
+            break_var.clone()
+        }
+        else {
+            self.tail.clone()
         }
     }
 
@@ -395,7 +406,9 @@ impl std::fmt::Debug for AScope {
             .field("explicit_bindings", &self.explicit_bindings)
             // .field("implicit_bindings", &self.implicit_bindings)
             .field("mirs", &self.mirs)
-            .field("ret", &self.ret)
+            .field("tail", &self.tail)
+            .field("ret_var", &self.ret_var)
+            .field("break_var", &self.break_var)
             .finish()
     }
 }

@@ -6,7 +6,7 @@ use std::{
 };
 
 use inkwellkit::{
-    config::{EmitType, PrintTy},
+    config::{EmitType, PrintTy, TargetType},
     targets::{
         CodeModel, FileType, InitializationConfig, RelocMode, Target,
         TargetMachine,
@@ -67,7 +67,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "generic",
                 "",
                 self.config.optlv.into(),
-                RelocMode::Default,
+                self.reloc_mode(),
                 CodeModel::Default,
             )
             .unwrap();
@@ -99,6 +99,14 @@ impl<'ctx> CodeGen<'ctx> {
                 .map_err(|llvmstr| CodeGenError::from(llvmstr))
         } else {
             Ok(self.vmmod.module.print_to_stderr())
+        }
+    }
+
+    fn reloc_mode(&self) -> RelocMode {
+        match self.config.target_type {
+            TargetType::Bin => RelocMode::Default,
+            TargetType::ReLoc => RelocMode::PIC,
+            TargetType::DyLib => RelocMode::DynamicNoPic,
         }
     }
 
