@@ -60,7 +60,6 @@ impl<'ctx> CodeGen<'ctx> {
             AVal::Return(sym_opt) => self.translate_return(sym_opt),
             AVal::InfiLoopExpr(blk_idx) => {
                 let res = self.translate_infi_loop(blk_idx);
-                self.break_to = None;
 
                 if res.is_none() {
                     return None;
@@ -282,24 +281,22 @@ impl<'ctx> CodeGen<'ctx> {
             self.get_fnval().unwrap().get_last_basic_block().unwrap();
         self.builder.build_unconditional_branch(blk_last);
 
-        self.has_ret = true;
-
         VMMod::null()
     }
 
     fn translate_continue(&self) -> BasicValueEnum<'ctx> {
-        let bb_cur = self.continue_to.unwrap();
+        let bb_cur = self.cur_blk().continue_to.unwrap();
         self.builder.build_unconditional_branch(bb_cur);
 
         VMMod::null()
     }
 
     fn translate_break(&mut self) -> BasicValueEnum<'ctx> {
-        if self.break_to.is_none() {
-            self.break_to = Some(self.insert_nonterminal_bb());
+        if self.cur_blk().break_to.is_none() {
+            self.cur_blk_mut().break_to = Some(self.insert_nonterminal_bb());
         }
 
-        let bb_nxt = self.break_to.unwrap();
+        let bb_nxt = self.cur_blk().break_to.unwrap();
         self.link_bb(bb_nxt);
 
         VMMod::null()
@@ -350,8 +347,6 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Option<BasicValueEnum<'ctx>> {
         self.sc.push(blk_idx);
 
-        self.has_ret = false;
-
         let mirs = self.amod.scopes[blk_idx].mirs.clone();
         let ret = self.amod.scopes[blk_idx].as_var();
 
@@ -359,11 +354,7 @@ impl<'ctx> CodeGen<'ctx> {
             self.translate_mir(mir);
         }
 
-        // println!("before ret {ret:?}");
-
         let ret = self.translate_avar(ret);
-
-        // println!("after ret {ret:?}");
 
         self.sc.pop();
 
@@ -405,7 +396,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             let bv_if = self.translate_block(blk_idx);
 
-            if !self.has_ret {
+            if !self.blks[blk_idx].has_ret {
                 self.builder.build_unconditional_branch(bb_nxt);
 
                 if !matches!(ty, AType::Void | AType::Never) {
@@ -419,7 +410,7 @@ impl<'ctx> CodeGen<'ctx> {
                 if let Some(else_idx) = else_blk {
                     let bv_else = self.translate_block(else_idx);
 
-                    if !self.has_ret {
+                    if !self.blks[else_idx].has_ret {
                         self.builder.build_unconditional_branch(bb_nxt);
 
                         if !matches!(ty, AType::Void | AType::Never) {
@@ -453,7 +444,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Option<BasicValueEnum<'ctx>> {
         /* Setup loop config */
         let bb_loop = self.insert_nonterminal_bb();
-        self.continue_to = Some(bb_loop);
+        self.blks[blk_idx].continue_to = Some(bb_loop);
 
         self.link_bb(bb_loop);
 

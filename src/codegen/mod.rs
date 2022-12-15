@@ -13,7 +13,7 @@ use inkwellkit::{
 };
 use m6lexerkit::{sym2str, Symbol, str2sym};
 
-use crate::ast_lowering::{AMod, AScope, AVal, AVar, ExtSymSet};
+use crate::ast_lowering::{AMod, AScope, ExtSymSet};
 
 pub(crate) mod expr;
 pub(crate) mod item;
@@ -65,11 +65,6 @@ pub(crate) struct CodeGen<'ctx> {
 
     phi_ret: Vec<(BasicValueEnum<'ctx>, BasicBlock<'ctx>)>,
 
-    // FIXME: 应该附着在逻辑块上
-    break_to: Option<BasicBlock<'ctx>>,
-    continue_to: Option<BasicBlock<'ctx>>,
-    has_ret: bool,
-
     builder: Builder<'ctx>,
 }
 
@@ -88,45 +83,22 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let vmmod = VMMod::new(&sym2str(amod.name));
-        let mut blks: Vec<LogicBlock> = amod
+        let blks: Vec<LogicBlock> = amod
             .scopes
             .iter()
             .map(|ascope| LogicBlock {
                 paren: ascope.paren,
                 bbs: vec![],
-                is_ret: false, // Be Unkonwn yet
+
+                has_ret: ascope.ret_var.is_some(),
+                break_to: None,
+                continue_to: None,
+
                 value_bindings: IndexMap::with_capacity(
                     ascope.implicit_bindings.len(),
                 ),
             })
             .collect();
-
-        /* Set `is_ret` attribute of LogicBlock */
-        let mut retval_scope = vec![];
-
-        for ascope in amod.scopes.iter() {
-            let AVar { ty: _, val } = &ascope.tail;
-
-            match val {
-                AVal::IfBlock { if_exprs, else_blk } => {
-                    for (_, idx) in if_exprs.into_iter() {
-                        retval_scope.push(*idx);
-                    }
-                    if let Some(idx) = else_blk {
-                        retval_scope.push(*idx);
-                    }
-                }
-                AVal::InfiLoopExpr(idx) => {
-                    retval_scope.push(*idx);
-                }
-                AVal::BlockExpr(idx) => retval_scope.push(*idx),
-                _ => (),
-            }
-        }
-
-        for i in retval_scope.into_iter() {
-            blks[i].is_ret = true;
-        }
 
         let fpm = PassManager::create(&vmmod.module);
 
@@ -153,9 +125,6 @@ impl<'ctx> CodeGen<'ctx> {
             fpm,
             sc: vec![0],
             phi_ret: vec![],
-            break_to: None,
-            continue_to: None,
-            has_ret: false,
             builder: VMMod::get_builder(),
         };
 
@@ -275,7 +244,12 @@ pub(crate) struct LogicBlock<'ctx> {
     pub(crate) paren: Option<usize>,
     pub(crate) bbs: Vec<BasicBlock<'ctx>>,
     pub(crate) value_bindings: IndexMap<Symbol, BasicValueEnum<'ctx>>,
-    pub(crate) is_ret: bool,
+
+    pub(crate) break_to: Option<BasicBlock<'ctx>>,
+    pub(crate) continue_to: Option<BasicBlock<'ctx>>,
+
+    /// There is `ret` instruction in this block, so we don't go next basicblock
+    pub(crate) has_ret: bool,
 }
 
 pub(crate) fn is_implicit_sym(sym: Symbol) -> bool {

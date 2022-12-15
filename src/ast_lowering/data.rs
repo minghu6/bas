@@ -87,6 +87,25 @@ pub struct AMod {
 }
 
 
+#[derive(Default)]
+pub(crate) struct AScope {
+    pub(crate) paren: Option<usize>,
+    /// val: tagid, ty; tagid 区别于函数内所有同名不同作用域的局部变量
+    ///
+    /// 局部变量/函数参数
+    pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AVar)>>,
+    /// idx - mir index
+    ///
+    /// 语法结构中间值
+    pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
+    pub(crate) mirs: Vec<MIR>,
+
+    pub(crate) tail: AVar,
+    pub(crate) break_var: Option<AVar>,
+    pub(crate) ret_var: Option<AVar>
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AType {
     Pri(APriType),
@@ -169,25 +188,6 @@ pub(crate) enum AVal {
 pub(crate) struct AVar {
     pub(crate) ty: AType,
     pub(crate) val: AVal, // MIR usize
-}
-
-
-#[derive(Default)]
-pub(crate) struct AScope {
-    pub(crate) paren: Option<usize>,
-    /// val: tagid, ty; tagid 区别于函数内所有同名不同作用域的局部变量
-    ///
-    /// 局部变量/函数参数
-    pub(crate) explicit_bindings: Vec<Entry<Symbol, (usize, AVar)>>,
-    /// idx - mir index
-    ///
-    /// 语法结构中间值
-    pub(crate) implicit_bindings: IndexMap<Symbol, usize>,
-    pub(crate) mirs: Vec<MIR>,
-
-    pub(crate) tail: AVar,
-    pub(crate) break_var: Option<AVar>,
-    pub(crate) ret_var: Option<AVar>
 }
 
 
