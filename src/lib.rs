@@ -19,5 +19,4 @@ mod codegen;
 pub mod shell;
 pub mod env;
 pub(crate) mod aux;
-pub(crate) mod core;
 pub(crate) mod name_mangling;

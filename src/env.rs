@@ -26,3 +26,8 @@ pub fn boostrap_dir() -> PathBuf {
 }
 
 
+#[inline]
+pub fn core_lib_path() -> PathBuf {
+    bas_home().join("core.o")
+}
+

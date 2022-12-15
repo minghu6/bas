@@ -93,7 +93,9 @@ impl SemanticAnalyzerPass2 {
                 self.cur_scope().tmp_name(),
                 tail_return_avar
             );
+
             self.cur_scope_mut().mirs.push(tail_return_mir);
+            self.cur_scope_mut().tail = AVar::void();
         }
 
         self.sc.pop();

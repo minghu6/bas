@@ -13,8 +13,8 @@ use inkwellkit::{
     },
 };
 
-use super::{CodeGen, CodeGenError, CodeGenResult};
-use crate::env::libbas_o_path;
+use super::{CodeGen, CodeGenError, CodeGenResult2};
+use crate::env::{libbas_o_path, core_lib_path};
 
 
 fn unique_suffix() -> String {
@@ -40,7 +40,7 @@ impl<'ctx> CodeGen<'ctx> {
             .with_extension("o")
     }
 
-    pub(crate) fn gen_file(&self) -> CodeGenResult {
+    pub(crate) fn gen_file(&self) -> CodeGenResult2 {
         match self.config.emit_type {
             EmitType::Obj => {
                 self.emit_obj()?;
@@ -52,9 +52,18 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn emit_obj(&self) -> CodeGenResult {
+    fn emit_obj(&self) -> CodeGenResult2 {
+        if matches!(self.config.print_type, PrintTy::StdErr) {
+            return Err(CodeGenError(
+                format!(
+                    "Unsupported output type {:?} for emit obj",
+                    self.config.print_type
+                )
+            ))
+        }
+
         Target::initialize_native(&InitializationConfig::default())
-            .map_err(|s| CodeGenError::new(&s))?;
+            .map_err(|s| CodeGenError(s))?;
 
         let triple = TargetMachine::get_default_triple();
         self.vmmod.module.set_triple(&triple);
@@ -76,22 +85,34 @@ impl<'ctx> CodeGen<'ctx> {
             .module
             .set_data_layout(&machine.get_target_data().get_data_layout());
 
-        let tmp_input = self.tmp_obj_fname();
 
-        machine.write_to_file(
-            &self.vmmod.module,
-            FileType::Object,
-            &tmp_input,
-        )?;
+        match self.config.target_type {
+            TargetType::Bin => {
+                let tmp_input = self.tmp_obj_fname();
 
-        self.link_core(&tmp_input)?;
+                machine.write_to_file(
+                    &self.vmmod.module,
+                    FileType::Object,
+                    &tmp_input,
+                )?;
 
-        self.clean_obj(&tmp_input)?;
+                self.link_core(&tmp_input)?;
+                self.clean_obj(&tmp_input)?;
+            }
+            TargetType::ReLoc => {
+                machine.write_to_file(
+                    &self.vmmod.module,
+                    FileType::Object,
+                    &self.config.print_type.get_path().unwrap(),
+                )?;
+            }
+            _ => todo!(),
+        }
 
         Ok(())
     }
 
-    fn emit_llvmir(&self) -> CodeGenResult {
+    fn emit_llvmir(&self) -> CodeGenResult2 {
         if let PrintTy::File(ref path) = self.config.print_type {
             self.vmmod
                 .module
@@ -110,21 +131,22 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn link_core(&self, input: &Path) -> CodeGenResult {
+    fn link_core(&self, input: &Path) -> CodeGenResult2 {
         Command::new("gcc")
             .arg(input)
-            .arg(libbas_o_path().to_str().unwrap())
+            .arg(libbas_o_path())
+            .arg(core_lib_path())
             .arg("-o")
             .arg(self.config.print_type.get_path().unwrap())
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .status()
             .and_then(|_| Ok(()))
-            .or_else(|st| Err(CodeGenError::new(&st.to_string())))
+            .or_else(|st| Err(CodeGenError(st.to_string())))
     }
 
-    fn clean_obj(&self, input: &Path) -> CodeGenResult {
+    fn clean_obj(&self, input: &Path) -> CodeGenResult2 {
         fs::remove_file(input)
-            .or_else(|st| Err(CodeGenError::new(&st.to_string())))
+            .or_else(|st| Err(CodeGenError(st.to_string())))
     }
 }

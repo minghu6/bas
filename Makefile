@@ -13,8 +13,8 @@ testexp0: getbasc
 	@ ./exp0
 
 testexp1: getbasc
-	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath exp1 -O2 -t lib
-	@ ./exp1
+	# @ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath stderr -O2 -t lib -e llvm-ir
+	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath exp1.o -O2 -t lib
 
 testcodegen:
 	cargo test -- --nocapture test_codegen

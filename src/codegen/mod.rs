@@ -11,7 +11,7 @@ use inkwellkit::{
     values::{BasicValueEnum, FunctionValue, PointerValue},
     VMMod,
 };
-use m6lexerkit::{sym2str, Symbol, str2sym};
+use m6lexerkit::{str2sym, sym2str, Symbol};
 
 use crate::ast_lowering::{AMod, AScope, ExtSymSet};
 
@@ -21,23 +21,21 @@ mod targets;
 pub(crate) mod ty;
 
 
-#[allow(unused)]
-#[derive(Debug)]
-pub(crate) struct CodeGenError {
-    msg: String,
+
+pub struct CodeGenExport {
+    pub amod: AMod,
+    pub ess: ExtSymSet,
 }
 
-impl CodeGenError {
-    pub(crate) fn new(msg: &str) -> Self {
-        Self {
-            msg: msg.to_owned(),
-        }
-    }
-}
+
+#[derive(Debug)]
+pub(crate) struct CodeGenError(String);
+
+
 
 impl From<LLVMString> for CodeGenError {
     fn from(llvmstring: LLVMString) -> Self {
-        Self::new(&llvmstring.to_string())
+        CodeGenError(llvmstring.to_string())
     }
 }
 impl std::fmt::Display for CodeGenError {
@@ -47,7 +45,9 @@ impl std::fmt::Display for CodeGenError {
 }
 impl Error for CodeGenError {}
 
-pub(crate) type CodeGenResult = Result<(), CodeGenError>;
+pub(crate) type CodeGenResult2 = Result<(), CodeGenError>;
+
+pub(crate) type CodeGenResult = Result<CodeGenExport, CodeGenError>;
 
 
 pub(crate) struct CodeGen<'ctx> {
@@ -76,9 +76,10 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> CodeGenResult {
         if matches!(config.target_type, TargetType::Bin) {
             if !amod.afns.contains_key(&str2sym("main")) {
-                return Err(CodeGenError {
-                    msg: format!("No entry(main) found for {:?}", amod.name),
-                });
+                return Err(CodeGenError(format!(
+                    "No entry(main) found for {:?}",
+                    amod.name
+                )));
             }
         }
 
@@ -114,7 +115,6 @@ impl<'ctx> CodeGen<'ctx> {
 
         fpm.initialize();
 
-
         let mut it = Self {
             vmmod,
             amod,
@@ -128,19 +128,15 @@ impl<'ctx> CodeGen<'ctx> {
             builder: VMMod::get_builder(),
         };
 
-        match it.config.target_type {
-            TargetType::Bin => {
-                it.gen_mod();
-                it.gen_file()?;
-            },
-            TargetType::ReLoc => {
-                it.gen_mod();
-                it.gen_file()?;
-            },
-            _ => unimplemented!(),
-        }
+        it.gen_mod();
+        it.gen_file().map(move |_| it.export())
+    }
 
-        Ok(())
+    pub(crate) fn export(self) -> CodeGenExport {
+        CodeGenExport {
+            amod: self.amod,
+            ess: self.ess,
+        }
     }
 
     pub(crate) fn root_scope(&self) -> &AScope {
