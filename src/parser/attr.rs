@@ -1,5 +1,5 @@
 use super::{
-    ParseResult2, Parser, SyntaxNode as SN, SyntaxType as ST, TokenTree,
+    ParseResult2, Parser, SyntaxNode as SN, SyntaxType as ST, TT,
 };
 
 
@@ -12,6 +12,6 @@ impl Parser {
             subs.push((ST::attr, SN::E(self.unchecked_advance())));
         }
 
-        Ok(TokenTree { subs })
+        Ok(TT { subs })
     }
 }

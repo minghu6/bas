@@ -10,16 +10,17 @@ edition = "2021"
 inkwellkit = { path = "../inkwellkit", features = ["llvm12-0"] }
 m6lexerkit = { path = "../m6lexerkit" }
 m6parserkit = { path = "../m6parserkit" }
+m6coll = { path = "../m6coll" }
+
 clap = { version = "^3", features = ["derive"] }
 clap_complete = "3.1.1"
 shellexpand = "2.1"
+
 indexmap = "1"
-m6coll = { path = "../m6coll" }
 regex = "1"
 either = "1"
 itertools = "0.10.*"
-
-maplit = "1"
+# nom = "7"
 
 [[bin]]
 name = "basc"

@@ -20,3 +20,5 @@ pub mod shell;
 pub mod env;
 pub(crate) mod aux;
 pub(crate) mod name_mangling;
+pub mod spec;
+

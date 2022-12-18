@@ -1,11 +1,10 @@
-use std::collections::HashSet;
-
 use m6lexerkit::{
-    aqstr_m, aux_strlike_m, dqstr_m, lazy_static, lit_regex_m,
-    make_token_matcher_rules, sqstr_m, tokenize as tokenize__, SrcFileInfo,
+    lazy_static,
+    make_token_matcher_rules, tokenize as tokenize__, SrcFileInfo,
     TokenMatchResult, TokenizeResult,
+    prelude::*
 };
-use maplit::hashset;
+
 
 make_token_matcher_rules! {
     tag       => "[[:alpha:]_][[:alnum:]_]*#",
@@ -22,52 +21,51 @@ make_token_matcher_rules! {
     lit_regex,
 
     // Comment
-    sharp_line_comment  => r"#.*",
+    sharp_line_comment,
 
     // White characters
-    sp      => "[[:blank:]]+",
-    newline => r#"\n\r?"#,
+    sp,
+    newline,
 
     // Bracket
-    lparen => r"\(",
-    rparen => r"\)",
-    lbracket => r"\[",
-    rbracket => r"\]",
-    lbrace => r"\{",
-    rbrace => r"\}",
+    lparen,
+    rparen,
+    lbracket,
+    rbracket,
+    lbrace,
+    rbrace,
 
     // Delimiter
-    colon => ":",
-    question => r"\?",
-    rarrow => "->",
-    rdarrow  => "=>",
-    semi   => ";",
-    comma  => ",",
+    colon,
+    question,
+    rarrow,
+    rdarrow,
+    semi,
+    comma,
 
     // Assign
-    assign => "=",
+    assign,
 
     // Unary Operation
-    inc => r"\+\+",
-    dec => r"--",
-    not => "!",
+    inc,
+    dec,
+    not,
 
     // Binary Operation
-    sub    => "-",
-    add    => r"\+[^\+]",
-    mul    => r"\*",
-    div    => "/",
-    dot    => r"\.",
-    ge     => ">=",
-    le     => "<=",
-    lt     => "<",
-    gt     => ">",
-    neq    => "!=",
-    eq     => "==",
-    percent=> "%",
-    and    => "&&",
-    or     => r"\|\|"
-
+    sub,
+    add,
+    mul,
+    div,
+    dot,
+    ge,
+    le,
+    lt,
+    gt,
+    neq,
+    eq,
+    percent,
+    and,
+    or
 }
 
 fn cmd_m(source: &str, from: usize) -> Option<TokenMatchResult> {
@@ -77,14 +75,15 @@ fn cmd_m(source: &str, from: usize) -> Option<TokenMatchResult> {
 
 
 lazy_static::lazy_static! {
-    static ref BLANK_TOK_SET: HashSet<&'static str> = hashset! {
+    static ref BLANK_TOK_SET: Vec<&'static str> = vec! [
         "sp",
         "newline",
         "sharp_line_comment"
-    };
+    ];
     static ref KEY_SET: Vec<&'static str> = vec! {
         "fn",
         "return",
+        "ret",
         "if",
         "else",
         "loop",

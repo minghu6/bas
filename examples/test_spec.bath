@@ -1,0 +1,7 @@
+@no_mangle
+fn vec_len(ptr) -> int;
+
+
+fn len(vec: [int]) -> int {
+    raw#vec_len(vec)
+}

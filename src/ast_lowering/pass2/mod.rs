@@ -11,7 +11,7 @@ use super::{
 use crate::{
     codegen::is_implicit_sym,
     name_mangling::mangling,
-    parser::{SyntaxType as ST, TokenTree},
+    parser::{SyntaxType as ST, TT},
 };
 
 mod expr;
@@ -438,11 +438,11 @@ impl SemanticAnalyzerPass2 {
     ////////////////////////////////////////////////////////////////////////////////
     //// Other Analyze method
 
-    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TokenTree) -> Symbol {
+    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TT) -> Symbol {
         analyze_pat_no_top(tt)
     }
 
-    pub(crate) fn analyze_ty(&mut self, tt: &TokenTree) -> AType {
+    pub(crate) fn analyze_ty(&mut self, tt: &TT) -> AType {
         analyze_ty(&mut self.cause_lists, tt)
     }
 

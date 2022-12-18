@@ -52,7 +52,6 @@ dependencies = [
  "m6coll",
  "m6lexerkit",
  "m6parserkit",
- "maplit",
  "regex",
  "shellexpand",
 ]
@@ -361,6 +360,7 @@ dependencies = [
 name = "m6parserkit"
 version = "0.1.0"
 dependencies = [
+ "m6lexerkit",
  "m6parserkit-proc-macros",
  "m6stack 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

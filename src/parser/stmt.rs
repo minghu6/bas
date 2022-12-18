@@ -1,6 +1,6 @@
 use super::{
     ParseErrorReason as R, ParseResult2, Parser, SyntaxNode as SN,
-    SyntaxType as ST, TokenTree,
+    SyntaxType as ST, TT,
 };
 
 
@@ -15,7 +15,7 @@ impl Parser {
 
             // Skip Type
             if self.peek1_t().check_name("colon") {
-                self.unchecked_advance();
+                subs.push((ST::colon, SN::E(self.unchecked_advance())));
                 subs.push((ST::Type, SN::T(self.parse_ty()?)));
             }
 
@@ -29,7 +29,7 @@ impl Parser {
 
         subs.push((ST::semi, SN::E(self.expect_eat_semi_t(four)?)));
 
-        Ok(TokenTree::new(subs))
+        Ok(TT::new(subs))
     }
 
     pub(crate) fn parse_stmts(&mut self) -> ParseResult2 {
@@ -42,7 +42,7 @@ impl Parser {
                 let expr_sn = SN::T(self.parse_expr()?);
                 if self.peek1_t().check_name("semi") {
                     let semi_sn = SN::E(self.unchecked_advance());
-                    let stmt_tt = TokenTree::new(vec![
+                    let stmt_tt = TT::new(vec![
                         (ST::Expr, expr_sn),
                         (ST::semi, semi_sn),
                     ]);
@@ -66,6 +66,6 @@ impl Parser {
             }
         }
 
-        Ok(TokenTree::new(subs))
+        Ok(TT::new(subs))
     }
 }

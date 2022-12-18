@@ -1,23 +1,23 @@
-use m6lexerkit::lazy_static::lazy_static;
-use m6lexerkit::{str2sym, sym2str, Symbol};
+use m6lexerkit::{lazy_static::lazy_static, str2sym, sym2str, Symbol};
+use m6parserkit::Cursor;
 use regex::Regex;
 
 use super::SemanticAnalyzerPass2;
 use crate::ast_lowering::ATag;
 use crate::{
     ast_lowering::{
-        aty_bool, aty_f64, aty_i32, APriType, ASymDef,
-        AType, AVal, AVar, ConstVal, SemanticErrorReason as R,
+        aty_bool, aty_f64, aty_i32, APriType, ASymDef, AType, AVal, AVar,
+        ConstVal, SemanticErrorReason as R,
     },
     name_mangling::mangling,
-    parser::{SyntaxType as ST, TokenTree},
+    parser::{SyntaxType as ST, TT},
 };
 
 
 
 impl SemanticAnalyzerPass2 {
-    pub(crate) fn analyze_expr(&mut self, tt: &TokenTree) -> AVar {
-        if tt[0].0 == ST::OpExpr {
+    pub(crate) fn analyze_expr(&mut self, tt: &TT) -> AVar {
+        if tt.len() == 3 && tt[0].0 == ST::Expr && tt[2].0 == ST::Expr {
             return self.analyze_bop_expr(tt);
         }
 
@@ -27,27 +27,30 @@ impl SemanticAnalyzerPass2 {
         let tt = sn.as_tt();
 
         match ty {
+            /* ExprBlk */
+
             ST::IfExpr => self.analyze_if_expr(tt),
             ST::InfiLoopExpr => self.analyze_infi_loop_expr(tt),
+            ST::BlockExpr => self.analyze_block_expr(tt),
+            ST::GroupedExpr => self.analyze_expr(&tt[0].1.as_tt()),
+
+
+            /* ExprSpan */
+
             ST::BreakExpr => self.analyze_break_expr(tt),
             ST::ContinueExpr => self.analyze_continue_expr(tt),
-
             ST::FunCallExpr => self.analyze_funcall_expr(tt),
-            ST::GroupedExpr => self.analyze_expr(&tt[0].1.as_tt()),
             ST::LitExpr => self.analyze_lit_expr(tt),
             ST::PathExpr => self.analyze_path_expr(tt),
             ST::ReturnExpr => self.analyze_return_expr(tt),
             ST::SideEffectExpr => self.analyze_side_effect_expr(tt),
             ST::CmdExpr => self.analyze_cmd_expr(tt),
-
+            ST::Expr => self.analyze_expr(tt),
             _ => unimplemented!("{:#?}", paren_tt),
         }
     }
 
-    pub(crate) fn analyze_funcall_expr(
-        &mut self,
-        tt: &TokenTree
-    ) -> AVar {
+    pub(crate) fn analyze_funcall_expr(&mut self, tt: &TT) -> AVar {
         debug_assert_eq!(tt[0].0, ST::PathExpr);
         debug_assert_eq!(tt[1].0, ST::GroupedExpr);
 
@@ -68,7 +71,7 @@ impl SemanticAnalyzerPass2 {
         let name_tok = seg0[0].1.as_tok();
         let base_name = name_tok.value;
 
-        let fn_params_tt = grouped[0].1.as_tt();
+        let fn_params_tt = grouped[1].1.as_tt();
         let mut param_syms = vec![];
         let mut param_tys = vec![];
 
@@ -89,8 +92,7 @@ impl SemanticAnalyzerPass2 {
         let fullname;
         if use_raw {
             fullname = base_name;
-        }
-        else {
+        } else {
             /* name mangling */
             fullname = mangling(base_name, &param_tys);
         }
@@ -107,22 +109,36 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn analyze_bop_expr(&mut self, tt: &TokenTree) -> AVar {
-        let mut sns = tt.subs.iter().peekable();
+    pub(crate) fn analyze_bop_expr(&mut self, tt: &TT) -> AVar {
+        let mut p = 0;
 
-        let tt1 = sns.next().unwrap().1.as_tt();
-        let (bopty, bopsn) = sns.next().unwrap();
+        let tt1 = tt[p].1.as_tt();
+        p += 1;
+
+        let (bopty, bopsn) = &tt[p];
         let bop_tok = bopsn.as_tok();
         let span = bop_tok.span();
-        let tt2 = sns.next().unwrap().1.as_tt();
+        p += 1;
+
+        let tt2 = tt[p].1.as_tt();
 
         /* EXCLUDE ASSIGN CASE */
+
         if *bopty == ST::assign {
-            // println!("tt1: {:#?}", tt.subs[0]);
-            let var = self.analyze_path_expr(tt1.subs[0].1.as_tt());
+            let var;
+            if tt1[0].0 != ST::PathExpr {
+                self.write_dialogsis(
+                    R::AssignRequireLV,
+                    tt1[0].1.span()
+                );
+
+                return AVar::undefined();
+            }
+            else {
+                var = self.analyze_path_expr(tt1[0].1.as_tt());
+            }
 
             let value = self.analyze_expr(tt2);
-
             let valty = value.ty.clone();
             let mut valsym = self.bind_value(value);
 
@@ -217,9 +233,8 @@ impl SemanticAnalyzerPass2 {
         };
     }
 
-    pub(crate) fn analyze_lit_expr(&mut self, tt: &TokenTree) -> AVar {
-        let mut sns = tt.subs.iter().peekable();
-        let (st, sn) = sns.next().unwrap();
+    pub(crate) fn analyze_lit_expr(&mut self, tt: &TT) -> AVar {
+        let (st, sn) = &tt[0];
 
         let tok = sn.as_tok();
         let mut tokv = sym2str(tok.value);
@@ -299,7 +314,7 @@ impl SemanticAnalyzerPass2 {
     //     tt.subs[0].1.as_tok().value
     // }
 
-    pub(crate) fn analyze_path_expr(&mut self, tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_path_expr(&mut self, tt: &TT) -> AVar {
         let p = 0;
 
         debug_assert_eq!(tt[p].0, ST::PathExprSeg);
@@ -313,7 +328,7 @@ impl SemanticAnalyzerPass2 {
         self.find_explicit_sym_or_diagnose(id, idtok.span)
     }
 
-    pub(crate) fn analyze_side_effect_expr(&mut self, tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_side_effect_expr(&mut self, tt: &TT) -> AVar {
         let subs = &tt.subs;
 
         debug_assert_eq!(subs.len(), 2);
@@ -373,7 +388,7 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn analyze_return_expr(&mut self, tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_return_expr(&mut self, tt: &TT) -> AVar {
         let mut sns = tt.subs.iter().peekable();
 
         let (st, sn) = sns.next().unwrap();
@@ -381,16 +396,13 @@ impl SemanticAnalyzerPass2 {
 
         if let Some((_st, sn)) = sns.next() {
             let retvar = self.analyze_expr(sn.as_tt());
-            self.build_ret(
-                retvar,
-                sn.span()
-            )
+            self.build_ret(retvar, sn.span())
         } else {
             self.build_ret(AVar::void(), sn.span())
         }
     }
 
-    pub(crate) fn analyze_cmd_expr(&mut self, tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_cmd_expr(&mut self, tt: &TT) -> AVar {
         let mut sns = tt.subs.iter();
 
         let (_st, sn) = sns.next().unwrap();
@@ -417,18 +429,13 @@ impl SemanticAnalyzerPass2 {
         let arg2 = self.build_const_vec_str(string_syms);
 
         let cmd_fndec = self
-            .find_func_by_name(
-                str2sym("cmd_symbols_replace"),
-            )
+            .find_func_by_name(str2sym("cmd_symbols_replace"))
             .unwrap();
 
         let cmd_sym =
             self.bind_value(cmd_fndec.fn_call_val(&[arg0, arg1, arg2]));
 
-        let exec_fndec = self.find_func_by_name(
-            str2sym("exec")
-        )
-        .unwrap();
+        let exec_fndec = self.find_func_by_name(str2sym("exec")).unwrap();
 
         let exec_res = self.bind_value(exec_fndec.fn_call_val(&[cmd_sym]));
         let ctlstr = self.build_const_str(str2sym("%s\n"));
@@ -439,30 +446,41 @@ impl SemanticAnalyzerPass2 {
         printf_fndec.fn_call_val(&[ctlstr, exec_res])
     }
 
-    pub(crate) fn analyze_if_expr(&mut self, tt: &TokenTree) -> AVar {
-        let mut sns = tt.subs.iter().peekable();
-        let span = sns.next().unwrap().1.as_tok().span(); // if idt
+    pub(crate) fn analyze_if_expr(&mut self, tt: &TT) -> AVar {
+        let mut p = Cursor::new(tt.len());
+        let span = tt[*p].1.span();  // if idt
+
+        /* skip <if> */
+
+        p.inc();
 
         let mut if_exprs = vec![];
         let mut else_blk = None;
 
-        while !sns.is_empty() {
-            let cond_var = self.analyze_expr(sns.next().unwrap().1.as_tt());
+        while !p.reach_end() {
+            let cond_var = self.analyze_expr(tt[*p].1.as_tt());
             let cond_sym = self.bind_value(cond_var);
-
-            // dbg!(sns.peek().unwrap());
+            p.inc();
 
             let if_expr_var =
-                self.analyze_block_expr(sns.next().unwrap().1.as_tt());
+                self.analyze_block_expr(tt[*p].1.as_tt());
             let if_expr_scope_idx = if_expr_var.val.as_block_expr_idx();
-
+            p.inc();
             if_exprs.push((cond_sym, if_expr_scope_idx));
 
-            if !sns.is_empty() && sns.peek().unwrap().0 == ST::BlockExpr {
-                let elsevar =
-                    self.analyze_block_expr(sns.next().unwrap().1.as_tt());
-                else_blk = Some(elsevar.val.as_block_expr_idx());
-                break;
+            if !p.reach_end() {
+                if tt[*p].0 == ST::r#else {
+                    /* skip <else> */
+                    p.inc();
+
+                    let elsevar = self.analyze_block_expr(tt[*p].1.as_tt());
+                    else_blk = Some(elsevar.val.as_block_expr_idx());
+                    break;
+                }
+                else {
+                    debug_assert_eq!(tt[*p].0, ST::r#if);
+                    p.inc();
+                }
             }
         }
 
@@ -498,7 +516,7 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn analyze_block_expr(&mut self, tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_block_expr(&mut self, tt: &TT) -> AVar {
         debug_assert!(tt.len() >= 2);
         debug_assert_eq!(tt[0].0, ST::lbrace);
         debug_assert_eq!(tt[tt.len() - 1].0, ST::rbrace);
@@ -513,16 +531,15 @@ impl SemanticAnalyzerPass2 {
         }
     }
 
-    pub(crate) fn analyze_infi_loop_expr(&mut self, tt: &TokenTree) -> AVar {
-        let var = self.analyze_block_expr(tt[0].1.as_tt());
+    pub(crate) fn analyze_infi_loop_expr(&mut self, tt: &TT) -> AVar {
+        let var = self.analyze_block_expr(tt[1].1.as_tt());
         let scope_id = var.val.as_block_expr_idx();
 
         self.sc.push(scope_id);
 
         if let Some(ref avar) = self.cur_scope().break_var {
             self.cur_scope_mut().tail.ty = avar.ty.clone();
-        }
-        else {
+        } else {
             self.cur_scope_mut().tail.ty = AType::Never;
         }
         let ty = self.cur_scope().as_var().ty;
@@ -531,13 +548,10 @@ impl SemanticAnalyzerPass2 {
 
         let val = AVal::InfiLoopExpr(scope_id);
 
-        AVar {
-            ty,
-            val,
-        }
+        AVar { ty, val }
     }
 
-    pub(crate) fn analyze_break_expr(&mut self, _tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_break_expr(&mut self, _tt: &TT) -> AVar {
         let var = AVar {
             ty: AType::Void,
             val: AVal::Break,
@@ -548,7 +562,7 @@ impl SemanticAnalyzerPass2 {
         var
     }
 
-    pub(crate) fn analyze_continue_expr(&mut self, _tt: &TokenTree) -> AVar {
+    pub(crate) fn analyze_continue_expr(&mut self, _tt: &TT) -> AVar {
         AVar {
             ty: AType::Void,
             val: AVal::Continue,
@@ -558,7 +572,7 @@ impl SemanticAnalyzerPass2 {
     pub(crate) fn do_analyze_block_with_scope(
         &mut self,
         scope_idx: usize,
-        tt: &TokenTree,
+        tt: &TT,
     ) {
         self.sc.push(scope_idx);
 
@@ -578,7 +592,7 @@ impl SemanticAnalyzerPass2 {
     }
 
     /// Side Effect Exec
-    pub(crate) fn do_analyze_expr(&mut self, tt: &TokenTree) {
+    pub(crate) fn do_analyze_expr(&mut self, tt: &TT) {
         let avar = self.analyze_expr(tt);
 
         self.bind_value(avar);

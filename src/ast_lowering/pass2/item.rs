@@ -7,7 +7,7 @@ use crate::{
         AVar, MIR,
         SemanticAnalyzerPass2, AnItem, AType
     },
-    parser::{SyntaxType as ST, TokenTree},
+    parser::{SyntaxType as ST, TT},
 };
 
 
@@ -22,7 +22,7 @@ impl SemanticAnalyzerPass2 {
     }
 
     /// id(fn name) - FnParams(fn params) - Ret(ret type) - BlockExpr(body)
-    pub(crate) fn do_analyze_fn(&mut self, name: Symbol, body: TokenTree) {
+    pub(crate) fn do_analyze_fn(&mut self, name: Symbol, body: TT) {
         // Set current fn name
         self.cur_fn = Some(name);
 

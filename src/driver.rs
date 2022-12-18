@@ -39,7 +39,7 @@ impl RunCompiler {
 
         let ess = ExtSymSet { mods: vec![core] };
 
-        let src = SrcFileInfo::new(src.as_ref())?;
+        let src = SrcFileInfo::new(src)?;
 
         let tokens = tokenize(&src)?;
 

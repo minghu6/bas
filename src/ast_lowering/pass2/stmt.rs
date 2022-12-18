@@ -1,34 +1,44 @@
 use super::SemanticAnalyzerPass2;
-use crate::{
-    parser::{SyntaxType as ST, TokenTree},
-};
+use crate::parser::{ST, TT};
 
 
 impl SemanticAnalyzerPass2 {
-    pub(crate) fn do_analyze_stmt(&mut self, tt: &TokenTree) {
-        let mut sns = tt.subs.iter().peekable();
+    pub(crate) fn do_analyze_stmt(&mut self, tt: &TT) {
+        let mut p = 0;
 
-        let (st, sn) = sns.next().unwrap();
-
-        if *st == ST::Expr {
-            self.do_analyze_expr(sn.as_tt());
+        if tt[p].0 == ST::Expr {
+            self.do_analyze_expr(tt[p].1.as_tt());
             return;
         }
 
-        if *st == ST::r#let {
-            let name = self.analyze_pat_no_top(sns.next().unwrap().1.as_tt());
-            let mut has_type_anno = false;
+        if tt[p].0 == ST::r#let {
+            /* skip <let> */
 
-            if sns.peek().unwrap().0 == ST::Type {
-                let ty = self.analyze_ty(&sns.next().unwrap().1.as_tt());
-                // Need Explicit Type Annotation
+            p += 1;
+
+            /* get pat_no_top */
+
+            let name = self.analyze_pat_no_top(tt[p].1.as_tt());
+            let mut has_type_anno = false;
+            p += 1;
+
+
+            if tt[p].0 == ST::colon {
+                /* skip colon */
+                p += 1;
+
+                let ty = self.analyze_ty(tt[p].1.as_tt());
+                p += 1;
+                // need explicit type annotation
                 self.create_var(name, ty);
                 has_type_anno = true;
             }
 
-            if sns.peek().unwrap().0 == ST::assign {
-                sns.next().unwrap();  // skip assign
-                let var = self.analyze_expr(sns.next().unwrap().1.as_tt());
+            if tt[p].0 == ST::assign {
+                /* skip assign */
+                p += 1;
+
+                let var = self.analyze_expr(tt[p].1.as_tt());
 
                 if !has_type_anno {
                     self.create_var(name, var.ty.clone());
@@ -39,6 +49,7 @@ impl SemanticAnalyzerPass2 {
             return;
         }
 
-        unreachable!("ST: {:#?}", st);
+        unreachable!("ST: {:#?}", tt[p].0);
     }
 }
+

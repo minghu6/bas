@@ -1,4 +1,5 @@
 use m6lexerkit::{str2sym, Span, SrcFileInfo, Symbol, sym2str};
+use m6parserkit::Cursor;
 
 use super::{ ExtSymSet, AnItem, TokenTree2};
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
         SemanticErrorReason as R, AnExtFnDec, A3ttrVal,
     },
     opt_osstr_to_str,
-    parser::{SyntaxType as ST, TokenTree},
+    parser::{SyntaxType as ST, TT},
 };
 
 
@@ -32,7 +33,7 @@ pub struct Pass1Export {
 
 
 impl SemanticAnalyzerPass1 {
-    pub(crate) fn run(src: SrcFileInfo, tt: TokenTree, ess: ExtSymSet) -> Pass1Result {
+    pub(crate) fn run(src: SrcFileInfo, tt: TT, ess: ExtSymSet) -> Pass1Result {
         let amod = AMod::init(str2sym(opt_osstr_to_str!(&src
             .get_path()
             .file_stem())));
@@ -47,7 +48,7 @@ impl SemanticAnalyzerPass1 {
         it.analyze(tt)
     }
 
-    fn analyze(mut self, tt: TokenTree) -> Pass1Result {
+    fn analyze(mut self, tt: TT) -> Pass1Result {
         let mut items = vec![];
 
         for (ty, sn) in tt.subs.into_iter() {
@@ -73,7 +74,7 @@ impl SemanticAnalyzerPass1 {
         }
     }
 
-    pub(crate) fn do_analyze_item(&mut self, mut tt: TokenTree) -> Option<AnItem> {
+    pub(crate) fn do_analyze_item(&mut self, mut tt: TT) -> Option<AnItem> {
         let mut p = 0;
 
         let attrs;
@@ -94,22 +95,49 @@ impl SemanticAnalyzerPass1 {
     }
 
     /// Function Definition or Exrernal Function Declare
-    pub(crate) fn do_analyze_fn(&mut self, mut attrs: A3ttrs, tt: TokenTree) -> Option<AnItem> {
-        // Syntax Node Stream
+    pub(crate) fn do_analyze_fn(&mut self, mut attrs: A3ttrs, tt: TT) -> Option<AnItem> {
         let mut p = 0;
 
-        /* Analyze fn name, params and ret */
+        /* skip <fn> */
+
+        p += 1;
+
+
+        /* get fn name */
 
         let idt = tt[p].1.as_tok().clone();
         let fn_base_name = idt.value;
         p += 1;
 
-        debug_assert_eq!(tt[p].0, ST::FnParams);
-        let params = self.analyze_fn_params(tt[p].1.as_tt());
+        /* skip <lparen> */
+
         p += 1;
 
+
+        /* get params */
+
+        let params;
+
+        if tt[p].0 == ST::FnParams {
+            params = self.analyze_fn_params(tt[p].1.as_tt());
+            p += 1;
+        }
+        else {
+            params = vec![];
+        }
+
+
+        /* skip <rparen> */
+
+        p += 1;
+
+
+        /* get ret type */
         let ret;
-        if tt[p].0 == ST::Type {
+        if tt[p].0 == ST::rarrow {
+            /* skip rarrow */
+            p += 1;
+
             ret = self.analyze_ty(tt[p].1.as_tt());
             p += 1;
         } else {
@@ -175,38 +203,43 @@ impl SemanticAnalyzerPass1 {
 
     pub(crate) fn analyze_fn_params(
         &mut self,
-        tt: &TokenTree,
+        tt: &TT,
     ) -> Vec<AParamPat> {
-        let mut sns = tt.subs.iter().peekable();
+        let mut p = Cursor::new(tt.len());
         let mut params = vec![];
 
-        while !sns.is_empty() && sns.peek().unwrap().0 == ST::FnParam {
-            let (param_ty, param_sn) = sns.next().unwrap();
+        if p.reach_end() {
+            // pass
+        }
+        else {
+            params.push(self.analyze_fn_param(tt[*p].1.as_tt()));
+            p.inc();
 
-            // println!("analyze fn_param_pats: param_sn {param_sn:#?}");
+            while !p.reach_end() {
+                /* skip comma */
+                debug_assert_eq!(tt[*p].0, ST::comma);
+                p.inc();
 
-            if *param_ty == ST::id {
-                write_diagnosis(
-                    &mut self.cause_lists,
-                    R::LackFormalParam,
-                    param_sn.as_tok().span(),
-                );
+                params.push(self.analyze_fn_param(tt[*p].1.as_tt()));
+                p.inc();
             }
-
-            params.push(self.analyze_fn_param(param_sn.as_tt()));
         }
 
         params
     }
 
-    pub(crate) fn analyze_fn_param(&mut self, tt: &TokenTree) -> AParamPat {
-        // println!("param: {tt:#?}");
-
+    pub(crate) fn analyze_fn_param(&mut self, tt: &TT) -> AParamPat {
         let mut p = 0;
-        // PatNoTop
+
+        /* get pat_no_top */
+
         let formal;
         if tt[p].0 == ST::PatNoTop {
-            formal = self.analyze_pat_no_top(tt[0].1.as_tt());
+            formal = self.analyze_pat_no_top(tt[p].1.as_tt());
+            p += 1;
+
+            /* skip colon */
+
             p += 1;
         }
         else {
@@ -218,27 +251,17 @@ impl SemanticAnalyzerPass1 {
         AParamPat { formal, ty }
     }
 
-    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TokenTree) -> Symbol {
+    pub(crate) fn analyze_pat_no_top(&mut self, tt: &TT) -> Symbol {
         analyze_pat_no_top(tt)
     }
 
-    pub(crate) fn analyze_ty(&mut self, tt: &TokenTree) -> AType {
+    pub(crate) fn analyze_ty(&mut self, tt: &TT) -> AType {
         analyze_ty(&mut self.cause_lists, tt)
     }
 
-    pub(crate) fn analyze_attrs(&mut self, tt: &TokenTree) -> A3ttrs {
+    pub(crate) fn analyze_attrs(&mut self, tt: &TT) -> A3ttrs {
         analyze_attrs(&mut self.cause_lists, tt)
     }
-
-    // pub(crate) fn find_func(
-    //     &self,
-    //     name: &str,
-    //     atys: &[AType],
-    // ) -> Option<AnExtFnDec> {
-    //     let fullname = mangling(str2sym(name), atys);
-
-    //     self.find_func_by_name(fullname)
-    // }
 
     pub(crate) fn find_func_by_name(
         &self,

@@ -10,7 +10,7 @@ use m6lexerkit::{sym2str, Span, SrcFileInfo, Symbol, Token};
 
 use crate::{
     name_mangling::mangling,
-    parser::{SyntaxNode as SN, SyntaxType as ST, TokenTree},
+    parser::{ST, TT},
     ref_source,
 };
 pub use pass1::SemanticAnalyzerPass1;
@@ -26,7 +26,7 @@ pub struct TokenTree2 {
 pub enum AnItem {
     Fn {
         name: Symbol,
-        body: TokenTree
+        body: TT
     }
 }
 
@@ -53,7 +53,6 @@ pub enum SemanticErrorReason {
     DupItemDef {
         name: Symbol,
     },
-    LackFormalParam,
     IncompatOpType {
         op1: AType,
         op2: AType,
@@ -71,6 +70,7 @@ pub enum SemanticErrorReason {
     NoMatchedFunc(Symbol, Vec<AType>), // basename, tys
     DuplicateAttr(Symbol, A3ttrVal),
     UnknownAttr(Symbol),
+    AssignRequireLV
 }
 use SemanticErrorReason as R;
 
@@ -136,9 +136,6 @@ impl std::fmt::Debug for SemanticError {
                     // ref_source!(prev, "=", f, self.src);
                     Ok(())
                 }
-                R::LackFormalParam => {
-                    writeln!(f, "Lack formal param:\n")
-                }
                 R::IncompatOpType { op1, op2 } => {
                     writeln!(f, "No compatiable operator between {op1:?} and {op2:?}:\n")
                 }
@@ -184,6 +181,9 @@ impl std::fmt::Debug for SemanticError {
                         f,
                         "Unknown Tag"
                     )
+                },
+                R::AssignRequireLV => {
+                    writeln!(f, "Assign require Left Value")
                 }
             }?;
             writeln!(f)?;
@@ -206,12 +206,6 @@ impl std::fmt::Display for SemanticError {
 impl std::error::Error for SemanticError {}
 
 
-impl TokenTree {
-    pub(crate) fn move_elem(&mut self, i: usize) -> (ST, SN) {
-        std::mem::replace(&mut self.subs[i], (ST::semi, SN::E(Token::eof())))
-    }
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Function
@@ -232,7 +226,7 @@ pub(crate) fn calc_fullname(
     mangling(base, &tys)
 }
 
-pub(crate) fn analyze_pat_no_top(tt: &TokenTree) -> Symbol {
+pub(crate) fn analyze_pat_no_top(tt: &TT) -> Symbol {
     let id = tt[0].1.as_tok();
 
     id.value
@@ -240,7 +234,7 @@ pub(crate) fn analyze_pat_no_top(tt: &TokenTree) -> Symbol {
 
 pub(crate) fn analyze_ty(
     cause_lists: &mut CauseLists,
-    tt: &TokenTree,
+    tt: &TT,
 ) -> AType {
     match analyze_ty_(tt) {
         Ok(aty) => aty,
@@ -252,7 +246,7 @@ pub(crate) fn analyze_ty(
 }
 
 
-pub(crate) fn analyze_ty_(tt: &TokenTree) -> Result<AType, Span> {
+pub(crate) fn analyze_ty_(tt: &TT) -> Result<AType, Span> {
     let tok_id = tt[0].1.as_tok();
 
     // analyze alias -- skip (inner multiple scan)
@@ -300,7 +294,7 @@ pub(crate) fn analyze_ty_(tt: &TokenTree) -> Result<AType, Span> {
 
 pub(crate) fn analyze_attrs(
     cause_lists: &mut CauseLists,
-    tt: &TokenTree,
+    tt: &TT,
 ) -> A3ttrs {
     let mut attrs = A3ttrs::new();
 

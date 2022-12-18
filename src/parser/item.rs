@@ -1,6 +1,6 @@
 use super::{
     ParseErrorReason as R, ParseResult2, Parser, SyntaxNode as SN,
-    SyntaxType as ST, TokenTree,
+    SyntaxType as ST, TT,
 };
 
 impl Parser {
@@ -10,19 +10,12 @@ impl Parser {
         let mut subs = vec![];
 
         if self.peek1_t().check_name("attr") {
-            subs.push(
-               (ST::Attrs, SN::T(self.parse_attrs()?))
-            );
+            subs.push((ST::Attrs, SN::T(self.parse_attrs()?)));
         }
 
         if self.peek1_t().check_name("fn") {
-            subs.push(
-                (
-                    ST::Function,
-                    SN::T(self.parse_fn()?),
-                )
-            );
-            return Ok(TokenTree::new(subs));
+            subs.push((ST::Function, SN::T(self.parse_fn()?)));
+            return Ok(TT::new(subs));
         } else if !subs.is_empty() {
             return Err(R::Expect {
                 expect: four,
@@ -40,14 +33,17 @@ impl Parser {
 
     pub(crate) fn parse_fn(&mut self) -> ParseResult2 {
         let four = ST::Function;
-
-        self.expect_eat_tok1_t(ST::r#fn, four)?;
         let mut subs = vec![];
 
-        subs.push((ST::id, SN::E(self.expect_eat_id_t(four)?)));  // function name
+        subs.push((
+            ST::r#fn,
+            SN::E(self.expect_eat_tok1_t(ST::r#fn, four)?)
+        ));
+
+        subs.push((ST::id, SN::E(self.expect_eat_id_t(four)?))); // function name
 
         if self.peek1_t().check_name("lparen") {
-            self.unchecked_advance();
+            subs.push((ST::lparen, SN::E(self.unchecked_advance())));
         } else {
             return Err(R::Expect {
                 expect: ST::lparen,
@@ -57,11 +53,13 @@ impl Parser {
         }
 
         subs.push((ST::FnParams, SN::T(self.parse_fn_params()?)));
-
-        self.expect_eat_tok1_t(ST::rparen, four)?;
+        subs.push((
+            ST::rparen,
+            SN::E(self.expect_eat_tok1_t(ST::rparen, four)?),
+        ));
 
         if self.peek1_t().check_name("rarrow") {
-            self.unchecked_advance();
+            subs.push((ST::rarrow, SN::E(self.unchecked_advance())));
 
             let ret = SN::T(self.parse_ty()?);
             subs.push((ST::Type, ret));
@@ -69,21 +67,20 @@ impl Parser {
 
         if self.peek1_t().check_name("semi") {
             subs.push((ST::semi, SN::E(self.unchecked_advance())));
-        }
-        else {
+        } else {
             subs.push((ST::BlockExpr, SN::T(self.parse_block_expr()?)));
         }
 
-        Ok(TokenTree::new(subs))
+        Ok(TT::new(subs))
     }
 
 
     fn parse_fn_params(&mut self) -> ParseResult2 {
+        let four = ST::FnParams;
         let mut subs = vec![];
 
         if !self.peek1_t().check_name("rparen") {
             loop {
-
                 let fn_param = SN::T(self.parse_fn_param()?);
                 subs.push((ST::FnParam, fn_param));
 
@@ -91,12 +88,17 @@ impl Parser {
                     break;
                 }
 
-                self.unchecked_advance(); // eat comma
+                // eat comma
+                subs.push((
+                    ST::comma,
+                    SN::E(self.expect_eat_tok1_t(ST::comma, four)?),
+                ));
             }
         }
 
-        return Ok(TokenTree::new(subs));
+        return Ok(TT::new(subs));
     }
+
 
     fn parse_fn_param(&mut self) -> ParseResult2 {
         let mut subs = vec![];
@@ -109,10 +111,13 @@ impl Parser {
             subs.push((ST::Type, SN::T(self.parse_ty()?)))
         } else {
             subs.push((ST::PatNoTop, SN::T(self.parse_pat_no_top()?)));
-            self.expect_eat_colon_t(ST::FnParamPat)?;
+            subs.push((
+                ST::colon,
+                SN::E(self.expect_eat_colon_t(ST::FnParamPat)?),
+            ));
             subs.push((ST::Type, SN::T(self.parse_ty()?)));
         }
 
-        return Ok(TokenTree::new(subs));
+        return Ok(TT::new(subs));
     }
 }

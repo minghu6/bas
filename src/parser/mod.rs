@@ -1,11 +1,9 @@
 use std::{
     fmt::Debug,
-    ops::{Index, IndexMut},
-    slice::SliceIndex,
 };
 
 use m6lexerkit::{Span, SrcFileInfo, Token};
-use m6parserkit::gen_syntax_enum;
+use m6parserkit::{ gen_syntax_enum, SyntaxNode, TokenTree };
 
 use crate::ref_source;
 
@@ -39,7 +37,7 @@ gen_syntax_enum! [ pub SyntaxType |
     LitExpr,
     PathExpr,
     PathExprSeg,
-    OpExpr,
+    BOpExpr,
     A_L_Expr,
     ComparisionExpr,
     LazyBooleanExpr,
@@ -61,20 +59,23 @@ gen_syntax_enum! [ pub SyntaxType |
     r#let,
     id,
     ret,
+    rarrow,
+
     lparen,
     rparen,
     lbrace,
     rbrace,
     lbracket,
     rbracket,
+
     comma,
     colon,
     colon2,
     semi,
+
     r#loop,
     r#if,
     r#else,
-    r#return,
     r#continue,
     r#break,
     lit_char,
@@ -120,25 +121,18 @@ gen_syntax_enum! [ pub SyntaxType |
     tag,
     eof
 ];
-
-
-pub struct TokenTree {
-    pub(crate) subs: Vec<(SyntaxType, SyntaxNode)>,
-}
-pub(crate) use SyntaxNode as SN;
 pub use SyntaxType as ST;
 
+pub type TT = TokenTree<ST>;
+pub type SN = SyntaxNode<ST>;
 
-#[derive(Debug)]
-pub enum SyntaxNode {
-    T(TokenTree),
-    E(Token),
-}
 
 
 pub struct Parser {
     cursor: usize,
     tokens: Vec<Token>,
+
+    ent_if_cond: bool,
     eof: Token,
 }
 
@@ -149,8 +143,8 @@ pub struct ParseError {
 }
 
 
-pub(crate) type ParseResult = Result<TokenTree, ParseError>;
-pub(crate) type ParseResult2 = Result<TokenTree, ParseErrorReason>;
+pub(crate) type ParseResult = Result<TT, ParseError>;
+pub(crate) type ParseResult2 = Result<TT, ParseErrorReason>;
 
 
 #[allow(unused)]
@@ -172,132 +166,9 @@ pub enum ParseErrorReason {
 }
 
 
-
-impl SN {
-    pub(crate) fn as_tt(&self) -> &TokenTree {
-        match self {
-            Self::T(ref tt) => tt,
-            SN::E(_) => unreachable!("{:?}", self),
-        }
-    }
-
-    pub(crate) fn into_tt(self) -> TokenTree {
-        match self {
-            Self::T(tt) => tt,
-            SN::E(_) => unreachable!("{:?}", self),
-        }
-    }
-
-    pub(crate) fn as_tok(&self) -> &Token {
-        match self {
-            Self::T(_) => unreachable!("{:?}", self),
-            Self::E(ref tok) => tok,
-        }
-    }
-
-    pub(crate) fn tok_1st(&self) -> Option<&Token> {
-        match self {
-            Self::T(tt) => tt.tok_1st(),
-            Self::E(tok) => Some(tok),
-        }
-    }
-
-    pub(crate) fn tok_last(&self) -> Option<&Token> {
-        match self {
-            Self::T(tt) => tt.tok_last(),
-            Self::E(tok) => Some(tok),
-        }
-    }
-
-    pub(crate) fn span(&self) -> Span {
-        match self {
-            Self::T(tt) => tt.span(),
-            Self::E(tok) => tok.span,
-        }
-    }
-}
-
-
-impl TokenTree {
-    pub(super) fn new(subs: Vec<(SyntaxType, SyntaxNode)>) -> Self {
-        Self { subs }
-    }
-
-    pub(super) fn len(&self) -> usize {
-        self.subs.len()
-    }
-
-    // pub(super) fn last(&self) -> &(SyntaxType, SyntaxNode) {
-    //     self.last_nth(1)
-    // }
-
-    pub(super) fn iter(&self) -> impl Iterator<Item = &(ST, SN)> {
-        self.subs.iter()
-    }
-
-    pub(crate) fn tok_1st(&self) -> Option<&Token> {
-        for (_, sn) in self.subs.iter() {
-            if let Some(ref tok) = sn.tok_1st() {
-                return Some(tok);
-            }
-        }
-
-        None
-    }
-
-    pub(crate) fn tok_last(&self) -> Option<&Token> {
-        for (_, sn) in self.subs.iter().rev() {
-            if let Some(ref tok) = sn.tok_last() {
-                return Some(tok);
-            }
-        }
-
-        None
-    }
-
-    pub(crate) fn span(&self) -> Span {
-        if let Some(tok_1st) = self.tok_1st() &&
-           let Some(tok_last) = self.tok_last()
-        {
-            Span {
-                from: tok_1st.span.from,
-                end: tok_last.span.end,
-            }
-        }
-        else {
-            Span::default()
-        }
-    }
-}
-
-impl std::fmt::Debug for TokenTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dbs = &mut f.debug_tuple("=>");
-
-        for (ty, sn) in self.subs.iter() {
-            dbs = dbs.field(ty);
-
-            match &*sn {
-                SyntaxNode::T(tt) => dbs = dbs.field(&tt),
-                SyntaxNode::E(tok) => dbs = dbs.field(&tok),
-            }
-        }
-
-        dbs.finish()
-    }
-}
-
-impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> Index<I> for TokenTree {
-    type Output = I::Output;
-
-    fn index(&self, index: I) -> &Self::Output {
-        Index::index(&self.subs, index)
-    }
-}
-
-impl<I: SliceIndex<[(SyntaxType, SyntaxNode)]>> IndexMut<I> for TokenTree {
-    fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        IndexMut::index_mut(&mut self.subs, index)
+impl Default for ST {
+    fn default() -> Self {
+        Self::semi
     }
 }
 
@@ -378,14 +249,17 @@ impl Debug for ParseErrorReason {
 }
 
 
-
-
 pub(crate) fn parse(tokens: Vec<Token>, srcfile: &SrcFileInfo) -> ParseResult {
     let mut parser = Parser::new(tokens);
 
-    parser.parse(srcfile)
-}
+    let tt = parser.parse(srcfile)?;
 
+    // println!("tt: {tt:#?}");
+
+    crate::spec::GRAMMER.verify(&tt).unwrap();
+
+    Ok(tt)
+}
 
 
 impl Parser {
@@ -393,6 +267,7 @@ impl Parser {
         Self {
             cursor: 0,
             tokens,
+            ent_if_cond: false,
             eof: Token::eof(),
         }
     }
@@ -419,14 +294,6 @@ impl Parser {
 
         Ok(self.unchecked_advance())
     }
-
-    // fn last_t(&self) -> &Token {
-    //     if self.cursor == 0 {
-    //         panic!("cursor at ZEOR hasn't last");
-    //     }
-
-    //     &self.tokens[self.cursor - 1]
-    // }
 
     fn peek1_t(&self) -> &Token {
         self.peek_t_(0)
@@ -463,12 +330,14 @@ impl Parser {
             subs.push((SyntaxType::Item, SyntaxNode::T(self.parse_item()?)))
         }
 
-        Ok(TokenTree { subs })
+        Ok(TT { subs })
     }
 
     fn parse(&mut self, srcfile: &SrcFileInfo) -> ParseResult {
         self.parse_()
-            .or_else(|reason| Err(reason.emit_error(srcfile.clone())))
+            .or_else(|reason|
+                Err(reason.emit_error(srcfile.clone()))
+            )
             .and_then(|tt| Ok(tt))
     }
 
