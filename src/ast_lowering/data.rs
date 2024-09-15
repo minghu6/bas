@@ -49,6 +49,7 @@ pub struct AnExtFnDec {
 
 
 pub struct AFnDec {
+    #[allow(unused)]
     pub idt: Token, // Identifier Token
     pub attrs: A3ttrs,
     // body_idx: Option<usize>,

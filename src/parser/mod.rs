@@ -1,6 +1,4 @@
-use std::{
-    fmt::Debug,
-};
+use std::fmt::Debug;
 
 use m6lexerkit::{Span, SrcFileInfo, Token};
 use m6parserkit::{ gen_syntax_enum, SyntaxNode, TokenTree };

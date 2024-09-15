@@ -44,6 +44,7 @@ pub(crate) type Pass2Result = Result<Pass2Export, SemanticError>;
 
 
 pub struct Pass2Export {
+    #[allow(unused)]
     pub src: SrcFileInfo,
     pub amod: AMod,
     pub ess: ExtSymSet

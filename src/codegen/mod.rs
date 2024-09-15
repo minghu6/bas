@@ -27,7 +27,7 @@ pub struct CodeGenExport {
     pub ess: ExtSymSet,
 }
 
-
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct CodeGenError(String);
 

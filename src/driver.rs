@@ -5,8 +5,8 @@ use m6lexerkit::SrcFileInfo;
 
 use crate::{
     ast_lowering::{
-        pass1::{Pass1Export, SemanticAnalyzerPass1},
-        pass2::{Pass2Export, SemanticAnalyzerPass2},
+        Pass1Export, SemanticAnalyzerPass1,
+        Pass2Export, SemanticAnalyzerPass2,
         AMod, AModExp, ExtSymSet, TokenTree2,
     },
     codegen::{CodeGen, CodeGenExport},

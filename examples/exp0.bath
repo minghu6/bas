@@ -7,11 +7,11 @@ fn main() -> int {
 
     count = 4;
 
-    let tmp = 2 + 3 * 4 - 2;
+    let tmp = 2 - 2 * 2 + 3 * 4 - 2;
     !(echo tmp: $tmp);
 
     loop {
-        if count < 10 {
+        if count < tmp * 2 {
             count++;
             !(sleep 1);
             !(tput rc);

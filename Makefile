@@ -8,10 +8,12 @@ copybin: build
 
 getbasc: build copybin
 
-testexp0: getbasc
+runexp0:
 	@ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath -O2 exp0
-	# @ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath stderr -O2 -t lib -e llvm-ir
+	@ # RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp0.bath stderr -O2 -t lib -e llvm-ir
 	@ ./exp0
+
+testexp0: getbasc runexp0
 
 testexp1: getbasc
 	# @ RUST_BACKTRACE=1 ./${BARE_COMPILER} ./examples/exp1.bath stderr -O2 -t lib -e llvm-ir

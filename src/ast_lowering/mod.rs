@@ -13,8 +13,8 @@ use crate::{
     parser::{ST, TT},
     ref_source,
 };
-pub use pass1::SemanticAnalyzerPass1;
-pub use pass2::SemanticAnalyzerPass2;
+pub use pass1::*;
+pub use pass2::*;
 pub use self::data::*;
 
 
