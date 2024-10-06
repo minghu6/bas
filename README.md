@@ -1,5 +1,5 @@
 
-# Bas Lanuage
+# Bas Language
 
 *derive from [barelang project](https://github.com/minghu6/barelang)*
 
@@ -17,7 +17,7 @@
 
 如果使用的 Linux 发行版的仓库里恰好有一个 LLVM-12 的包，那么直接安装就是一个选择，但如果没有，或者想要更加控制地编译想要的版本，那么就需要从源代码开始编译。
 
-#### Build & Install
+### Compile LLVM-12
 
 首先获取 LLVM-12 的源代码，但是该死的 LLVM 仓库里对应v12的代码居然有非常低级的Bug，于是我fork了源代码仓库，并做了修改。
 
@@ -25,7 +25,7 @@
 
 构建过程和详细参数配置可以参考[clang子项目的building介绍](https://clang.llvm.org/get_started.html)，写得比 LLVM 本家项目要好。
 
-**进入构建目录**
+**Out-of-tree build**
 
 ```bash
 cd llvm-project
@@ -33,11 +33,11 @@ mkdir build # (in-tree build is not supported)
 cd build
 ```
 
-#### 生成构建配置
+#### Generate Build Configure
 
 有几个需要关注的配置项（[详细参考](https://llvm.org/docs/CMake.html#llvm-related-variables)）：
 
-**构建类型**
+**Build Type**
 
 `CMAKE_BUILD_TYPE = Debug | RelWithDebInfo | Release | MinSizeRel`
 
@@ -46,7 +46,7 @@ RelWithDebInfo： 仅需要 Debug LLVM生成的代码
 Release：只使用
 MinSizeRel：只使用，而且减少空间占用
 
-**编译器和链接器**
+**Compiler & Linker**
 
 `CMAKE_CXX_COMPILER = clang++ | g++ (default)`
 
@@ -56,7 +56,7 @@ MinSizeRel：只使用，而且减少空间占用
 
 clang 项目生成代码的优化水平比 gcc 项目还是强不少的，特别是使用 lld ，可以使 LLVM 的构建速度加快不少。
 
-**构建系统**
+**Build System**
 
 `G: Ninja | Unix Makefiles | Visual Studio | Xcode`
 
@@ -80,7 +80,7 @@ cmake -DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
 
 如果要更换工具链，那么需要 cmake 前面传入一个 `--fresh` 参数，来移除所有的 `CMakeCache.txt` ，但这也意味着要完全重新进行编译，所以开始工具链的选择要慎重。
 
-#### 构建
+#### Build
 
 这里不通过 cmake 而直接调用构建工具是为了方便配置参数，特别是如果前面没用 `LLVM_PARALLEL_{COMPILE,LINK,TABLEGEN}_JOBS` 指定并发数量。
 
@@ -92,7 +92,7 @@ cmake -DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
 ninja -j3  # cmake --build .
 ```
 
-#### 安装
+#### Install
 
 假设目录安装在 `/usr/local/llvm-12` 上。
 
@@ -100,7 +100,7 @@ ninja -j3  # cmake --build .
 sudo cmake -DCMAKE_INSTALL_PREFIX=/usr/local/llvm-12 -P cmake_install.cmake
 ```
 
-### Configure
+#### Configure
 
 最体面的方式应该是提前考虑对多个版本的 LLVM 的管理问题，但是没有一个成熟又普适的现成管理工具，于是考虑最小化代价的解决方案，通过管理环境变量的方式做版本管理。
 
@@ -194,17 +194,17 @@ prefix=["~/coding/Rust"]
 
 ## Follow-Up
 
-### 语言设计
+### Design
 
 其实在开发的过程中，最大的问题是语言设计的问题，如果事先没有想好一个完整的语言设计，而是一边实现一边设计，那会是非常痛苦，从最前端词法语法解析到语义分析再到LLVM-IR的生成，相当于要把整个项目改一遍，这种做法实在不可取！
 
 特别是，我并没有特别想要做的语言设计，充其量有一些语法上的想法，项目也是为了好玩儿和做技术验证，之所以设定为一个脚本目的的语言也是为了不让它变得很复杂、庞大，能有一个现实的用途，以现实使用的反馈指导设计。
 
-并且传统的 shell 语言都很不体面，以 Bash 为例，居然是直接在Token流上做语义分析，而传统的通用脚本语言，Perl的严格模式已经把它的真正优势自我阉割了，相对最好用的还得是Python ，但总是搁着一层正规语言的壳子，而最好的脚本语言一定是简单直接的，好像在 shell 里写代码一样，就像 Perl 曾经的那样。
+并且传统的 shell 语言都很不体面，以 Bash 为例，居然是直接在Token流上做语义分析，而传统的通用脚本语言，Perl的严格模式已经把它的真正优势自我阉割了，相对最好用的还得是Python ，但总是割开着一层正规语言的壳子，而最好的脚本语言一定是简单直接的，好像在 shell 里写代码一样，就像 Perl 曾经的那样。
 
 由于这两方面的原因，因此成为了 Bas 初始的设计目标，但是具体设计还并不完整，强行固化也可以，但是和传统语言一样也就没意思了。
 
-### 既有补完
+### To-do List
 
 虽然还没有完整具体的语言设计，但是还是有很多既有的工作可以来做， 包括不限于如下：
 
@@ -217,4 +217,3 @@ prefix=["~/coding/Rust"]
 6. 实现一个合适的机制，包括对源文件的无注解的语法树的序列化，和缓存既有语法树的编译文件，使得可以作为脚本语言方便运行，高级任务；
 7. 增加一套 IO 的标准库函数，便于完成基本的文本处理工作， 高级任务；
 8. 按照 DWARF 格式在 LLVM 生成代码时嵌入 Debug 信息，繁琐的高级任务；
-
