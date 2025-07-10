@@ -5,7 +5,7 @@ use inkwellkit::{
     get_ctx,
     types::{FloatType, IntType},
 };
-use m6coll::KVEntry as Entry;
+use m6entry::KVEntry as Entry;
 use m6lexerkit::{str2sym, sym2str, Symbol, Token};
 
 use super::MIR;

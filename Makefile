@@ -37,3 +37,9 @@ testspec:
 .PHONY: clean
 clean:
 	@ rm -f *.so *.o ${BARE_COMPILER} main *.out *.d *.ll
+
+clean-exp0:
+	@ rm -f exp0
+
+clean-lib:
+	@ rm -f libbas.a

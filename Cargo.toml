@@ -3,14 +3,14 @@ cargo-features = ["different-binary-name"]
 [package]
 name = "bas"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 
 [dependencies]
 inkwellkit = { path = "../inkwellkit", features = ["llvm12-0"] }
 m6lexerkit = { path = "../m6lexerkit" }
 m6parserkit = { path = "../m6parserkit" }
-m6coll = { path = "../m6coll" }
+m6entry = { path = "../m6coll/m6entry" }
 
 clap = { version = "^3", features = ["derive"] }
 clap_complete = "3.1.1"
@@ -20,7 +20,6 @@ indexmap = "1"
 regex = "1"
 either = "1"
 itertools = "0.10.*"
-# nom = "7"
 
 [[bin]]
 name = "basc"

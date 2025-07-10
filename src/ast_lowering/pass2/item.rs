@@ -1,4 +1,4 @@
-use m6coll::KVEntry;
+use m6entry::KVEntry;
 use m6lexerkit::{Symbol, sym2str};
 
 use crate::{

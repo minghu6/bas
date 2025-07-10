@@ -1,6 +1,5 @@
 #![feature(exact_size_is_empty)]
 #![feature(slice_index_methods)]
-#![feature(let_chains)]
 
 //! 特别地，允许 `mutable_borrow_reservation_conflict`
 //! 迁就这个问题会很不方便地影响熟悉的控制流，而这个原始问题最新的[消息]

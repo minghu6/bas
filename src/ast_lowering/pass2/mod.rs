@@ -1,5 +1,5 @@
 use indexmap::indexmap;
-use m6coll::KVEntry as Entry;
+use m6entry::KVEntry as Entry;
 use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
 
 use super::{

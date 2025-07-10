@@ -5,8 +5,8 @@ use clap_complete::{Shell, generate};
 use shellexpand::tilde;
 
 
-pub fn gen_completions(gen: Shell, cmd: &mut Command) {
-    match gen.to_string().to_uppercase().as_str() {
+pub fn gen_completions(r#gen: Shell, cmd: &mut Command) {
+    match r#gen.to_string().to_uppercase().as_str() {
         "BASH" => {
             let t = tilde("~/.local/share/bash-completion/completions/");
             let dir = PathBuf::from(t.to_string());
@@ -17,8 +17,8 @@ pub fn gen_completions(gen: Shell, cmd: &mut Command) {
             let f = File::create(fullpath).unwrap();
             let mut writer = BufWriter::new(f);
 
-            // generate(gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
-            generate(gen, cmd, bin_name, &mut writer);
+            // generate(r#gen, cmd, cmd.get_name().to_string(), &mut io::stdout());
+            generate(r#gen, cmd, bin_name, &mut writer);
         }
         _ => unimplemented!(),
     }
