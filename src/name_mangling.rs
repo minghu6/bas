@@ -21,7 +21,7 @@ impl AType {
             Self::Never => format!("!")
         }
     }
-    #[allow(unused)]
+
     pub fn unident_name(s: &str) -> Option<Self> {
         // let ss = sym2str(sym);
         // let s = ss.as_str();

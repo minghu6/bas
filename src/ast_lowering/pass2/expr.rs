@@ -165,18 +165,16 @@ impl SemanticAnalyzerPass2 {
         let sym1 = self.bind_value(var1.clone());
         let symdef1 = ASymDef::new(sym1, var1.ty.clone());
 
-        /* TODO: Short Circuit Evaluation */
-        if *bopty == ST::and {
-            // if var1.val eq 0 { 0 } else { analyze_var2 }
-            // if var1.val { 0 } else { analyze_var2 }
+        /* EXCLUDE SHORT CIRCUIT EVALUATION CASE */
 
-            let ifblk_idx = self.push_single_value_scope(AVar {
+        if *bopty == ST::and {
+            let var2 = self.analyze_expr(tt2);
+            let ifblk_idx = self.push_single_value_scope(var2);
+
+            let elseblk_idx = self.push_single_value_scope(AVar {
                 ty: aty_bool(),
                 val: AVal::ConstAlias(ConstVal::Bool(false)),
             });
-
-            let var2 = self.analyze_expr(tt2);
-            let elseblk_idx = self.push_single_value_scope(var2);
 
             let ifblk = AVal::IfBlock {
                 if_exprs: vec![(sym1, ifblk_idx)],
@@ -190,13 +188,10 @@ impl SemanticAnalyzerPass2 {
         }
 
         if *bopty == ST::or {
-            // if var1.val ne 0 { 1 } else { analyze_var2 }
-            // or if var1.val { analyze_var2 } else { 1 }
-
             let var2 = self.analyze_expr(tt2);
-            let ifblk_idx = self.push_single_value_scope(var2);
+            let elseblk_idx = self.push_single_value_scope(var2);
 
-            let elseblk_idx = self.push_single_value_scope(AVar {
+            let ifblk_idx = self.push_single_value_scope(AVar {
                 ty: aty_bool(),
                 val: AVal::ConstAlias(ConstVal::Bool(true)),
             });
@@ -224,7 +219,7 @@ impl SemanticAnalyzerPass2 {
 
         let retval = AVal::BOpExpr {
             op: bopty.clone(),
-            operands: vec![var1_sym, var2_sym],
+            operands: (var1_sym, var2_sym),
         };
 
         return AVar {
@@ -373,7 +368,7 @@ impl SemanticAnalyzerPass2 {
 
         let val = AVal::BOpExpr {
             op,
-            operands: vec![symdef1.name, symdef2.name],
+            operands: (symdef1.name, symdef2.name),
         };
         let nxt_var = AVar {
             ty: symdef1.ty.clone(),

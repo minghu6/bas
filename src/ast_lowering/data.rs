@@ -111,7 +111,6 @@ pub(crate) struct AScope {
 pub enum AType {
     Pri(APriType),
     Arr(APriType, u8), // Normal Array (usize index)
-    #[allow(unused)]
     AA(Vec<APriType>), // Associative Array (str index)
     Void,
     /// Rust type "!"
@@ -169,18 +168,22 @@ pub(crate) enum AVal {
     },
     BOpExpr {
         op: ST,
-        operands: Vec<Symbol>,
+        operands: (Symbol, Symbol),
     },
     TypeCast {
         name: Symbol,
         ty: AType,
     },
     ConstAlias(ConstVal),
+    /// 1. 表示值是一个变量
+    ///
+    /// 2. 指向声明变量的标识符（和 tagid）
     Var(Symbol, usize), // symname, tagid : get var value
     Assign(Symbol, usize, Symbol), //  namesym, tagid, valsym : set var value
     Break,
     Continue,
     Return(Option<Symbol>),
+    /// Void & Undefined Value
     PH,
 }
 

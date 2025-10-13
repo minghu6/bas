@@ -95,6 +95,7 @@ impl SemanticAnalyzerPass2 {
             );
 
             self.cur_scope_mut().mirs.push(tail_return_mir);
+            // ignore function body value on semantics analyze,
             self.cur_scope_mut().tail = AVar::void();
         }
 

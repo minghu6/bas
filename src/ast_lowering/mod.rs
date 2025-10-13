@@ -33,7 +33,7 @@ pub enum AnItem {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MIR {
-    // SSA
+    // Static Single Assignment, SSA
     pub(crate) name: Symbol,
     pub(crate) tagid: Option<usize>,
     pub(crate) mirty: MIRTy,

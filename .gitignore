@@ -11,3 +11,4 @@ libbas.a
 
 .vscode/
 .rdbgrc.breakpoints
+.~lock.*.odg#

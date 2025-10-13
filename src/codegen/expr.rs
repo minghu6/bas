@@ -95,12 +95,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn translate_bop_expr(
         &self,
         op: ST,
-        operands: Vec<Symbol>,
+        operands: (Symbol, Symbol),
     ) -> BasicValueEnum<'ctx> {
-        debug_assert_eq!(operands.len(), 2);
-
-        let ope1st = self.find_sym(operands[0]).unwrap();
-        let ope2nd = self.find_sym(operands[1]).unwrap();
+        let ope1st = self.find_sym(operands.0).unwrap();
+        let ope2nd = self.find_sym(operands.1).unwrap();
 
         match op {
             ST::add => {

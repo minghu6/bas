@@ -79,7 +79,7 @@ Expr:
   | [ReturnExpr]
   | [CmdExpr]
   | [FunCallExpr]
-  | [Expr]
+
 
 BlockExpr:
   | <lbrace> [Stmts] <rbrace>
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_spec_verify() {
-        let src = SrcFileInfo::new(&"examples/test_spec.bath").unwrap();
+        let src = SrcFileInfo::new(&"examples/exp0.bath").unwrap();
 
         let tokens = tokenize(&src).unwrap();
 

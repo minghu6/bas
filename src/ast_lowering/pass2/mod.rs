@@ -189,8 +189,6 @@ impl SemanticAnalyzerPass2 {
         if let Some((_tagid, avar)) = self.find_explicit_sym_ty_and_tag(&sym) {
             avar
         } else {
-            // println!("{:#?}", self.frame_stack());
-
             self.write_dialogsis(R::UnknownSymBinding(sym), span);
 
             AVar::undefined()
@@ -274,7 +272,7 @@ impl SemanticAnalyzerPass2 {
         sym
     }
 
-    /// Create a local variable (alloc)
+    /// Create a local variable (alloc) without initialization
     pub(crate) fn create_var(&mut self, sym: Symbol, ty: AType) {
         let fn_alloc =
             self.amod.allocs.get_mut(&self.cur_fn.unwrap()).unwrap();
@@ -365,6 +363,7 @@ impl SemanticAnalyzerPass2 {
 
     pub(super) fn build_const_vec_str(&mut self, strs: Vec<Symbol>) -> Symbol {
         /* Create Vec */
+        
         let cap = self.build_const_usize(strs.len().try_into().unwrap());
         let fndec = self.find_func_by_name(
             str2sym("vec_new_ptr"),

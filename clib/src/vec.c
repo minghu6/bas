@@ -33,7 +33,7 @@ typedef void *ptr;
                                                              \
     v->len = 0;                                              \
     v->cap = cap;                                            \
-    v->data = malloc(cap);                                   \
+    v->data = malloc(sizeof(type) * cap);                    \
                                                              \
     return v;                                                \
   }
