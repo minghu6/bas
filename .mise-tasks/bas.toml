@@ -1,0 +1,34 @@
+#:schema https://mise.jdx.dev/schema/mise-task.json
+
+["bas:clean"]
+description = "Remove generated artifacts (binaries, objects, libs)"
+run = "rm -f *.so *.o basc main *.out *.d *.ll exp[0-9][0-9]* libbas.a"
+
+["bas:get:basc"]
+description = "Build and copy the basc binary to project root"
+run = """
+set -e
+cargo build
+cp ./target/debug/basc .
+"""
+
+["bas:get:lib"]
+description = "Build and bring in libbas.a"
+dir = "clib"
+run = """
+set -e
+make libbas.a
+cp ./libbas.a ../
+"""
+
+["bas:test:codegen"]
+description = "Test codegen"
+run = "cargo test -- --nocapture test_codegen"
+
+["bas:test:boot"]
+description = "Test boot"
+run = "RUST_BACKTRACE=1 cargo test -- --nocapture test_boot"
+
+["bas:test:spec"]
+description = "Test spec"
+run = "cargo test -- --nocapture test_spec_"

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# LLVM runtime-lib bundler: copy third-party shared-library dependencies into the
+# install prefix and make them resolve inside it, so the toolchain runs on hosts
+# whose userland differs from the build environment (e.g. libxml2 soname drift).
+#
+# Usage:
+#   bundle-runtime-libs <prefix>   walk every ELF under <prefix>, copy its external
+#                                  dependencies into <prefix>/lib, and rewrite RUNPATH
+#                                  to DT_RPATH=$ORIGIN/../lib (inherited down the load chain)
+#
+# Contract:
+#   stdout   one line per bundled lib, then "prefix <prefix> is now self-contained"
+#   stderr   diagnostics
+#   exit     non-zero on any failure (set -euo pipefail)
+set -euo pipefail
+shopt -s nullglob
+
+P="${1:?pass <prefix>}"
+
+# ---------- pass 0: set RPATH first so lddtree can follow internal->external edges ----------
+find "$P/bin" -maxdepth 1 -type f -exec patchelf --force-rpath --set-rpath '$ORIGIN/../lib' {} +
+find "$P/lib" -maxdepth 1 -name 'lib*.so*' ! -type l -exec patchelf --force-rpath --set-rpath '$ORIGIN/../lib' {} +
+
+# ---------- pass 1: compute the dependency closure in a single lddtree process ----------
+deps=$(lddtree -l "$P/bin/"* "$P/lib/"lib*.so* | grep -oE '/[^[:space:]]+' | sort -u)
+
+# ---------- pass 2: bundle external libs + recreate soname symlinks ----------
+echo "$deps" | while read -r lib; do
+  case "$lib" in
+    "$P"/*) continue ;;                          # already inside the prefix
+  esac
+  case "$(basename "$lib")" in
+    # glibc / gcc runtime: provided by the host, not bundled
+    libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libstdc++.so*|libgcc_s.so*|ld-linux*) continue ;;
+  esac
+  dst="$P/lib/$(basename "$lib")"
+  [ -e "$dst" ] && continue
+  cp -n "$lib" "$dst"
+  so=$(patchelf --print-soname "$dst" 2>/dev/null)
+  if [ -n "$so" ] && [ "$so" != "$(basename "$dst")" ]; then
+    ln -sf "$(basename "$dst")" "$P/lib/$so"
+  fi
+done
+
+# ---------- pass 3: bundled libs must resolve their own deps inside the prefix ----------
+find "$P/lib" -maxdepth 1 -name 'lib*.so*' ! -type l -exec patchelf --force-rpath --set-rpath '$ORIGIN/../lib' {} +
+
+echo "prefix $P is now self-contained"

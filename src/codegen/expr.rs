@@ -1,8 +1,9 @@
 use either::Either;
-use inkwellkit::values::{BasicValueEnum, InstructionOpcode};
-use inkwellkit::{FloatPredicate, IntPredicate, VMMod};
+use inkwell::values::{BasicValueEnum, InstructionOpcode};
+use inkwell::{FloatPredicate, IntPredicate};
+use inkwellkit::VMMod;
 use itertools::Itertools;
-use m6lexerkit::{sym2str, Symbol};
+use m6parserkit::lexer::{sym2str, Symbol};
 
 use super::CodeGen;
 use crate::ast_lowering::{APriType, AType, AVal, AVar, ConstVal, MIRTy, MIR};

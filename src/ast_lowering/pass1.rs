@@ -1,4 +1,4 @@
-use m6lexerkit::{str2sym, Span, SrcFileInfo, Symbol, sym2str};
+use m6parserkit::lexer::{str2sym, Span, SrcFileInfo, Symbol, sym2str};
 use m6parserkit::Cursor;
 
 use super::{ ExtSymSet, AnItem, TokenTree2};

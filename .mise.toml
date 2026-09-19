@@ -1,0 +1,38 @@
+[settings]
+lockfile = true
+task.quiet = true
+
+[tools]
+"cargo:submod" = "latest"
+
+[env]
+_.path = ["{{ vars.llvm_home }}/bin"]  # prepend to shell (`mise activate` tells) PATH
+LLVM_SYS_120_PREFIX = "{{ vars.llvm_home }}"
+
+# mise renders vars top-down
+[vars]
+llvm_version = "12"
+llvm_home = "/usr/local/llvm-{{ vars.llvm_version }}"
+llvm_root = "{{ config_root }}/third-party/llvm-project"
+llvmenv_image_base_distro = "ubuntu"
+llvmenv_image_base_version = "22.04"
+llvmenv_image_base = "{{ vars.llvmenv_image_base_distro }}{{ vars.llvmenv_image_base_version }}"
+llvmenv_image_tag = "llvm{{ vars.llvm_version }}:{{ vars.llvmenv_image_base }}"
+llvmenv_run_head = """
+podman run --rm --userns=keep-id \
+  -v "{{ vars.llvm_root }}":/llvm-project \
+  -w /llvm-project"""
+llvmenv_run = "{{ vars.llvmenv_run_head }} {{ vars.llvmenv_image_tag }} "
+llvm_cmake_static_flags = """\
+-DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM;RISCV;WebAssembly" \
+-DLLVM_BUILD_LLVM_DYLIB=ON \
+-DLLVM_LINK_LLVM_DYLIB=ON \
+-DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
+-DCMAKE_CXX_FLAGS="-Wno-deprecated -Wno-deprecated-copy" \
+-DCMAKE_CXX_STANDARD=17 \
+-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+-DCMAKE_CXX_COMPILER=clang++-{{ vars.llvm_version }} \
+-DCMAKE_C_COMPILER=clang-{{ vars.llvm_version }} \
+-DLLVM_USE_LINKER=lld-{{ vars.llvm_version }} \
+-DLLVM_INCLUDE_DOCS=OFF \
+"""

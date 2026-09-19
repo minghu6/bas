@@ -1,12 +1,10 @@
 use std::{cmp::{max, min}, fmt::Debug};
 
 use indexmap::{indexmap, IndexMap};
-use inkwellkit::{
-    get_ctx,
-    types::{FloatType, IntType},
-};
+use inkwell::types::{FloatType, IntType};
+use inkwellkit::get_ctx;
 use m6entry::KVEntry as Entry;
-use m6lexerkit::{str2sym, sym2str, Symbol, Token};
+use m6parserkit::lexer::{str2sym, sym2str, Symbol, Token};
 
 use super::MIR;
 use crate::parser::SyntaxType as ST;

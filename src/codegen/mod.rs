@@ -1,17 +1,15 @@
 use std::error::Error;
 
 use indexmap::{indexmap, IndexMap};
-use inkwellkit::{
+use inkwell::{
     basic_block::BasicBlock,
     builder::Builder,
-    config::*,
-    get_ctx,
     passes::PassManager,
     support::LLVMString,
     values::{BasicValueEnum, FunctionValue, PointerValue},
-    VMMod,
 };
-use m6lexerkit::{str2sym, sym2str, Symbol};
+use inkwellkit::{config::*, get_ctx, VMMod};
+use m6parserkit::lexer::{str2sym, sym2str, Symbol};
 
 use crate::ast_lowering::{AMod, AScope, ExtSymSet};
 

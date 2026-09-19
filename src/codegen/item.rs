@@ -1,6 +1,7 @@
-use inkwellkit::{config::OptLv, get_ctx, module::Linkage};
+use inkwell::module::Linkage;
+use inkwellkit::{config::OptLv, get_ctx};
 use itertools::Itertools;
-use m6lexerkit::{sym2str, Symbol};
+use m6parserkit::lexer::{sym2str, Symbol};
 
 use super::CodeGen;
 use crate::ast_lowering::{AParamPat, AVal, MIR, AType, AnExtFnDec, A3ttrName};

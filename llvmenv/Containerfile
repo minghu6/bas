@@ -1,0 +1,20 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---------- layer: LLVM build toolchain (stable) ----------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang-12 clang-tools-12 lld-12 \
+    cmake ninja-build \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------- layer: LLVM CMake dev libraries (stable) ----------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    zlib1g-dev libncurses5-dev libxml2-dev libedit-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------- layer: aux tooling (add new tools here) ----------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git patchelf pax-utils \
+    && rm -rf /var/lib/apt/lists/*

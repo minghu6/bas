@@ -1,0 +1,18 @@
+[package]
+name = "inkwellkit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+inkwell = { path = "../third-party/inkwell" }
+either = "1.6.*"
+clap = { version = "^3" }
+inkwellkit_macros = { path = "./proc_macros" }
+
+[features]
+llvm12-0 = ["inkwell/llvm12-0"]
+
+[workspace]
+members = [
+    "proc_macros",
+]

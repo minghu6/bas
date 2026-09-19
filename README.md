@@ -21,19 +21,22 @@
 
 首先获取 LLVM-12 的源代码，但是该死的 LLVM 仓库里对应v12的代码居然有非常低级的Bug，于是我fork了源代码仓库，并做了修改。
 
-`git clone --single-branch -b release/12.x.m6.fix --depth 1 https://github.com/minghu6/llvm-project-m6.git llvm-project`
+`git clone --single-branch -b release/12.x.m6.fix --depth 1 https://github.com/minghu6/llvm-project-m6.git third-party/llvm-project`
 
 构建过程和详细参数配置可以参考[clang子项目的building介绍](https://clang.llvm.org/get_started.html)，写得比 LLVM 本家项目要好。
+
+#### Install Build Tools
+
+`sudo apt install -y build-essential ninja-build cmake clang lld zlib1g-dev`
+
+#### Generate Build Configure
 
 **Out-of-tree build**
 
 ```bash
-cd llvm-project
-mkdir build # (in-tree build is not supported)
-cd build
+mkdir llvm-12-build # (in-tree build is not supported)
+cd llvm-12-build
 ```
-
-#### Generate Build Configure
 
 有几个需要关注的配置项（[详细参考](https://llvm.org/docs/CMake.html#llvm-related-variables)）：
 
@@ -75,7 +78,7 @@ cmake -DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
     -DCMAKE_C_COMPILER=clang \
     -DLLVM_USE_LINKER=lld \
     -G "Ninja" \
-    ../llvm
+    ../third-party/llvm-project/llvm
 ```
 
 如果要更换工具链，那么需要 cmake 前面传入一个 `--fresh` 参数，来移除所有的 `CMakeCache.txt` ，但这也意味着要完全重新进行编译，所以开始工具链的选择要慎重。
@@ -86,7 +89,7 @@ cmake -DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
 
 个人经验，有几个编译和链接任务存在内存瓶颈，可能需要手动降低下并发数，进而降低内存消耗，避免内存不足或者进入SWAP，特别是如果编译得是 Debug 版本。
 
-另外注意，ninja 是默认并发 6 ，而 make 默认不并发。
+另外注意，ninja 默认跑满最大并发我们最好手动指定并发数，而 make 默认不并发。
 
 ```bash
 ninja -j3  # cmake --build .
@@ -162,14 +165,15 @@ prefix=["~/coding/Rust"]
 对官方 [inkwell](https://github.com/TheDan64/inkwell) 的 fork 版本，方便控制版本变化。
 它是对上游 [llvm-sys](https://crates.io/crates/llvm-sys) 的高级抽象， llvm-sys 通过指定环境变量 `LLVM_SYS_<VERSION>_PREFIX` 或者调用 `PATH` 上的 `llvm-config` ，直接绑定具体的 LLVM（的 C API）。
 
-`git clone https://github.com/minghu6/m6inkwell.git`
+已作为子模块引入到 `third-party/inkwell`：
+
+`git submodule update --init third-party/inkwell`
 
 #### inkwellkit
 
 对 `inkwell` 的工具包，主要是提供了一些预处理宏，方便做代码 binding 。
 
-
-`git clone https://github.com/minghu6/inkwellkit.git`
+源码随项目一起提交，位于顶层 `inkwellkit/`（预处理宏在其子目录 `inkwellkit/proc_macros/`，crate 名 `inkwellkit_macros`），本地改动即时生效，无需额外获取步骤。
 
 #### lexkit
 
@@ -193,6 +197,10 @@ prefix=["~/coding/Rust"]
 *编译器的运行不依赖 LLVM ，代价是较大的空间占用，不过这对现代通用型编译器来说是科学的 Trade Off，进一步的讨论在[这里]()。*
 
 ## Follow-Up
+
+## Recommend
+
+cargo-override 快速智能patch 远程 到 本地仓库 来方便调试代码
 
 ### Design
 

@@ -5,13 +5,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use inkwellkit::{
-    config::{EmitType, PrintTy, TargetType},
-    targets::{
-        CodeModel, FileType, InitializationConfig, RelocMode, Target,
-        TargetMachine,
-    },
+use inkwell::targets::{
+    CodeModel, FileType, InitializationConfig, RelocMode, Target,
+    TargetMachine,
 };
+use inkwellkit::config::{EmitType, PrintTy, TargetType};
 
 use super::{CodeGen, CodeGenError, CodeGenResult2};
 use crate::env::{libbas_o_path, core_lib_path};

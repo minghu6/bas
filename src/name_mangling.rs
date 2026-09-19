@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use m6lexerkit::{Symbol, sym2str, str2sym};
+use m6parserkit::lexer::{Symbol, sym2str, str2sym};
 
 use crate::ast_lowering::{AType, APriType};
 

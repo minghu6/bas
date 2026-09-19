@@ -1,7 +1,7 @@
 use std::{error::Error, path::Path};
 
 use inkwellkit::config::{self, CompilerConfig};
-use m6lexerkit::SrcFileInfo;
+use m6parserkit::lexer::SrcFileInfo;
 
 use crate::{
     ast_lowering::{

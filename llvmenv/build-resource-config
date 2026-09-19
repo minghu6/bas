@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# LLVM build resource probe: detects host resources, prints build parameters.
+#
+# Usage:
+#   build-resource-config configure   configure phase: link parallelism from total RAM
+#                                     (rejects hosts with less than 8 GiB total)
+#   build-resource-config build       build phase: container memory cap and job count
+#                                     from currently available RAM and CPU cores
+#                                     (rejects runs whose cap would fall below 4 GiB)
+#
+# Contract:
+#   stdout   KEY=VALUE lines, emitted only after the gate passes (safe to eval)
+#   stderr   human-readable log
+#   exit     non-zero means the gate rejected this host or this run
+#
+# Public interface (the only names that leave this process):
+#   configure -> LLVMENV_LINK_JOBS
+#   build   -> LLVMENV_MEM_MIB  LLVMENV_NINJA_JOBS
+set -euo pipefail
+
+# ---------- tunables (all sizes in MiB) ----------
+MIN_TOTAL_MIB=8192         # minimum total RAM required to build LLVM
+MIN_MEM_MIB=4096           # minimum container memory cap
+RESERVE_PCT=20             # host reserve, percentage of total RAM
+RESERVE_MIN_MIB=4096       # host reserve floor
+MIB_PER_COMPILE_JOB=2048   # memory budgeted per parallel compile job
+
+log()  { printf '%s\n' "$*" >&2; }   # human-readable, never on stdout
+emit() { printf '%s\n' "$*"; }       # machine-readable, the only stdout writer
+
+mem_total_mib() { awk '/^MemTotal:/     {printf "%d", $2/1024}' /proc/meminfo; }
+mem_avail_mib() { awk '/^MemAvailable:/ {printf "%d", $2/1024}' /proc/meminfo; }
+
+phase="${1:-}"
+
+case "$phase" in
+configure)
+  total_mib=$(mem_total_mib)
+
+  # gate: reject hosts too small to be worth building on
+  if [ "$total_mib" -lt "$MIN_TOTAL_MIB" ]; then
+    log "error: MemTotal ${total_mib}MiB < ${MIN_TOTAL_MIB}MiB, host too small to build LLVM"
+    exit 1
+  fi
+
+  # link jobs: tiered by total RAM; linking is the memory spike, so it gets its own cap
+  if [ "$total_mib" -le 16384 ]; then
+    link_jobs=1
+  elif [ "$total_mib" -le 32768 ]; then
+    link_jobs=2
+  else
+    link_jobs=3
+  fi
+
+  log "info: MemTotal ${total_mib}MiB -> LLVM_PARALLEL_LINK_JOBS=${link_jobs}"
+  emit "LLVMENV_LINK_JOBS=${link_jobs}"
+  ;;
+
+build)
+  avail_mib=$(mem_avail_mib)
+  total_mib=$(mem_total_mib)
+  cores=$(nproc)
+
+  # host reserve: RESERVE_PCT% of total RAM, never below RESERVE_MIN_MIB
+  reserve_mib=$(( total_mib * RESERVE_PCT / 100 ))
+  if [ "$reserve_mib" -lt "$RESERVE_MIN_MIB" ]; then
+    reserve_mib=$RESERVE_MIN_MIB
+  fi
+
+  # container memory cap = currently available RAM - host reserve
+  mem_mib=$(( avail_mib - reserve_mib ))
+
+  # gate: reject runs whose cap would be too small
+  if [ "$mem_mib" -lt "$MIN_MEM_MIB" ]; then
+    log "error: MemAvailable ${avail_mib}MiB - reserve ${reserve_mib}MiB = ${mem_mib}MiB < ${MIN_MEM_MIB}MiB"
+    exit 1
+  fi
+
+  # job count: (1) what memory can feed, (2) capped by cores, (3) floor of 1
+  jobs_by_mem=$(( mem_mib / MIB_PER_COMPILE_JOB ))
+  jobs=$jobs_by_mem
+  if [ "$jobs" -gt "$cores" ]; then
+    jobs=$cores
+  fi
+  if [ "$jobs" -lt 1 ]; then
+    jobs=1
+  fi
+
+  log "info: mem ${mem_mib}MiB (avail ${avail_mib} - reserve ${reserve_mib})"
+  log "info: jobs: ${mem_mib}MiB / ${MIB_PER_COMPILE_JOB}MiB = ${jobs_by_mem}, cores ${cores} -> ninja -j${jobs}"
+  emit "LLVMENV_MEM_MIB=${mem_mib} LLVMENV_NINJA_JOBS=${jobs}"
+  ;;
+
+*)
+  log "usage: $0 {configure|build}"
+  exit 2
+  ;;
+esac

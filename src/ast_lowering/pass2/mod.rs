@@ -1,6 +1,6 @@
 use indexmap::indexmap;
 use m6entry::KVEntry as Entry;
-use m6lexerkit::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
+use m6parserkit::lexer::{str2sym, sym2str, Span, SrcFileInfo, Symbol, Token};
 
 use super::{
      analyze_pat_no_top, analyze_ty,

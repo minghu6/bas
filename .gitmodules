@@ -1,0 +1,8 @@
+[submodule "llvm-project"]
+	path = third-party/llvm-project
+	url = https://github.com/minghu6/llvm-project
+	branch = release/12.x.m6.fix
+[submodule "inkwell"]
+	path = third-party/inkwell
+	url = https://github.com/minghu6/inkwell.git
+	branch = m6/llvm-12

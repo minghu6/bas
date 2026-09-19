@@ -1,4 +1,4 @@
-use m6lexerkit::lazy_static::lazy_static;
+use m6parserkit::lexer::lazy_static::lazy_static;
 use m6parserkit::*;
 
 
@@ -128,7 +128,7 @@ FunCallExpr:
 
 #[cfg(test)]
 mod tests {
-    use m6lexerkit::SrcFileInfo;
+    use m6parserkit::lexer::SrcFileInfo;
 
     use super::*;
     use crate::{lexer::tokenize, parser::parse};

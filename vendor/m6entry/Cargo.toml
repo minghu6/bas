@@ -1,0 +1,10 @@
+[package]
+name = "m6entry"
+version = "0.2.0"
+edition = "2021"
+repository = "https://github.com/minghu6/rust-m6kit/tree/master/core/m6entry"
+license = "0BSD"
+description = "Convenient key-value pair"
+
+[dependencies]
+concat-idents = "1.0"

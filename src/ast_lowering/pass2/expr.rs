@@ -1,4 +1,4 @@
-use m6lexerkit::{lazy_static::lazy_static, str2sym, sym2str, Symbol};
+use m6parserkit::lexer::{lazy_static::lazy_static, str2sym, sym2str, Symbol};
 use m6parserkit::Cursor;
 use regex::Regex;
 

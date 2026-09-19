@@ -1,0 +1,38 @@
+#:schema https://mise.jdx.dev/schema/mise-task.json
+
+# Update each third-party submodule to the tip of its branch, then verify it.
+# git supplies both the list of submodules and the branch to follow (from
+# .gitmodules), so nothing else has to be kept in sync.
+#
+# Note: a plain `git submodule update --remote` fetches each submodule's whole
+# refspec; on llvm-project that drags in the fork's other branch (release/22.x)
+# as a multi-GB download that never finishes in reasonable time. So each
+# submodule is fetched for its branch only.
+["submod:update"]
+description = "Update third-party submodules to their branch tip, then verify it"
+run = """
+set -e
+
+git submodule foreach --quiet '
+  set -e
+  branch=$(git -C "$toplevel" config -f .gitmodules --get "submodule.$name.branch")
+  [ -n "$branch" ] || { echo "FAIL: no branch configured for $name" >&2; exit 1; }
+
+  git fetch --no-tags origin "$branch"
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git checkout --quiet "$branch"
+  else
+    git checkout --quiet -b "$branch" "origin/$branch"
+  fi
+  git merge --ff-only "origin/$branch"
+
+  # Verification: the submodule must now contain the tip of that branch. The
+  # commands above are not trusted on their own; the fact comes from git.
+  head=$(git rev-parse HEAD); tip=$(git rev-parse "origin/$branch")
+  git merge-base --is-ancestor "$tip" HEAD || {
+    echo "FAIL: $name at $(printf %.9s "$head"), origin/$branch is $(printf %.9s "$tip")" >&2
+    exit 1
+  }
+  echo "ok: $name at $(printf %.9s "$head") (origin/$branch)"
+'
+"""

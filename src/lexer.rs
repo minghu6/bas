@@ -1,4 +1,4 @@
-use m6lexerkit::{
+use m6parserkit::lexer::{
     lazy_static,
     make_token_matcher_rules, tokenize as tokenize__, SrcFileInfo,
     TokenMatchResult, TokenizeResult,
@@ -129,7 +129,7 @@ fn tokenize_(source: &SrcFileInfo) -> TokenizeResult {
 mod tests {
     use std::path::PathBuf;
 
-    use m6lexerkit::{SrcFileInfo, Token};
+    use m6parserkit::lexer::{SrcFileInfo, Token};
 
     use super::tokenize;
 

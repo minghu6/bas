@@ -1,8 +1,9 @@
-use inkwellkit::
+use inkwell::
     {types::{ BasicMetadataTypeEnum, RetTypeEnum }, AddressSpace };
 
-use inkwellkit::{ load_vm_common_ty, get_ctx };
-use m6lexerkit::sym2str;
+use inkwellkit::get_ctx;
+use inkwellkit_macros::load_vm_common_ty;
+use m6parserkit::lexer::sym2str;
 
 use crate::ast_lowering::{ AType, APriType };
 

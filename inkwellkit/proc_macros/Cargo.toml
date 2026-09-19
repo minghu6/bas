@@ -1,0 +1,15 @@
+[package]
+name = "inkwellkit_macros"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+proc-macro2 = "^1.0"
+quote = "^1.0"
+syn = { version = "^1.0" }
+uuid = { version = "0.8", features = ["v4"] }
+
+
+[lib]
+proc-macro = true

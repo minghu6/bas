@@ -6,7 +6,7 @@ pub mod pass2;
 use std::fmt::Debug;
 
 use itertools::Itertools;
-use m6lexerkit::{sym2str, Span, SrcFileInfo, Symbol, Token};
+use m6parserkit::lexer::{sym2str, Span, SrcFileInfo, Symbol, Token};
 
 use crate::{
     name_mangling::mangling,

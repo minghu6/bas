@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use m6lexerkit::{Span, SrcFileInfo, Token};
+use m6parserkit::lexer::{Span, SrcFileInfo, Token};
 use m6parserkit::{ gen_syntax_enum, SyntaxNode, TokenTree };
 
 use crate::ref_source;
@@ -392,7 +392,7 @@ impl Parser {
 mod tests {
     use std::path::PathBuf;
 
-    use m6lexerkit::SrcFileInfo;
+    use m6parserkit::lexer::SrcFileInfo;
 
     use super::parse;
     use crate::lexer::tokenize;

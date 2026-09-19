@@ -1,4 +1,4 @@
-use m6lexerkit::{Token, Span};
+use m6parserkit::lexer::{Token, Span};
 use m6parserkit::{parse_infix_expr, BopWrapper, InfixExpr};
 
 use super::{

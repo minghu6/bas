@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-use m6lexerkit::Token;
+use m6parserkit::lexer::Token;
 
 use super::{
     ParseErrorReason as R, ParseResult2, Parser, SyntaxNode as SN,
