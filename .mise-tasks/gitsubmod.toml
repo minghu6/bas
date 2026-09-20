@@ -12,10 +12,12 @@ rm -rf .git/modules/"$(basename "$usage_submodule_path")"
 """
 
 ["gitsubmod:init-llvm-project"]
+raw = true
+interactive = true
 run = """
 set -e
 
-if [ -n "$(ls -A {{ vars.llvm_root }})" ]; then
+if [ -n "$(ls -A {{ vars.llvm_root }} 2>/dev/null)" ]; then
   printf 'submodules already exist in %s; overwrite? [y/N] ' \
     {{ vars.llvm_root }} >&2;
   read -r ans
@@ -25,15 +27,25 @@ if [ -n "$(ls -A {{ vars.llvm_root }})" ]; then
   esac
 fi
 
-git -c submodule.llvm-project.update=none submodule update --init \
-  --filter=blob:none --depth 1 {{ vars.llvm_root }}
-git -C {{ vars.llvm_root }} sparse-checkout init --no-cone
-git -C {{ vars.llvm_root }} sparse-checkout set --skip-checks {{ vars.llvm_sparse_paths }}
-git submodule update --init {{ vars.llvm_root }}
+name=$(basename {{ vars.llvm_root }})
+url=$(git config -f .gitmodules --get "submodule.$name.url")
+commit=$(git ls-tree HEAD -- "{{ vars.llvm_root }}" | awk '{print $3}')
+
+git clone --filter=blob:none --no-checkout "$url" {{ vars.llvm_root }}
+git -C {{ vars.llvm_root }} sparse-checkout set --no-cone {{ vars.llvm_sparse_paths }}
+git -C {{ vars.llvm_root }} checkout --quiet "$commit"
+# Absorb submodule into main repository
+if ! out=$(git submodule absorbgitdirs {{ vars.llvm_root }} 2>&1); then
+  printf '%s\n' "$out" >&2
+  exit 1
+fi
+git submodule init {{ vars.llvm_root }}
 """
 
 ["gitsubmod:init-inkwell"]
-run = """
+raw = true
+interactive = true
+run = '''
 set -e
 
 if [ -n "$(ls -A {{ vars.inkwell_root }})" ]; then
@@ -46,17 +58,29 @@ if [ -n "$(ls -A {{ vars.inkwell_root }})" ]; then
 fi
 
 git submodule update --init {{ vars.inkwell_root }}
-"""
+'''
 
 
 ["gitsubmod:update-llvm-project"]
-run = """
+raw = true
+interactive = true
+description = "Sync llvm-project submodule to the remote main repository's commit"
+run = '''
 set -e
-
-"""
+git submodule update --init --depth 1 --filter=blob:none {{ vars.llvm_root }}
+git -C {{ vars.llvm_root }} sparse-checkout reapply
+'''
 
 ["gitsubmod:update-inkwell"]
-run = """
+raw = true
+interactive = true
+run = '''
 set -e
+git submodule update {{ vars.inkwell_root }}
+'''
 
-"""
+["gitsubmod:update"]
+depends = ["gitsubmod:update-inkwell", "gitsubmod:update-llvm-project"]
+
+["gitsubmod:init"]
+depends = ["gitsubmod:init-inkwell", "gitsubmod:init-llvm-project"]
