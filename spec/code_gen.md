@@ -1,3 +1,0 @@
-
-
-value_bindings:

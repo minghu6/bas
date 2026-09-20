@@ -12,3 +12,5 @@ libbas.a
 .vscode/
 .rdbgrc.breakpoints
 .~lock.*.odg#
+
+llvmenv/multiarch-oci

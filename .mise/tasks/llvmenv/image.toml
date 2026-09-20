@@ -1,0 +1,159 @@
+#:schema https://mise.jdx.dev/schema/mise-task.json
+
+["llvmenv:image:build-local"]
+description = "Build the local LLVM {{ vars.llvm_version }} build environment image"
+dir = "llvmenv"
+run = '''
+podman build -t {{ vars.llvmenv_image_tag }} \
+  --label minghu6.llvmenv.bas={{ vars.llvmenv_image_tag }} \
+  -f Containerfile .
+'''
+depends_post = ["llvmenv:image:prune-dangling"]
+
+["llvmenv:image:prune-dangling"]
+description = """
+Remove dangling llvmenv images (scoped by label, \
+never touches other projects)"""
+run = '''
+podman images --filter label=minghu6.llvmenv.bas --filter dangling=true -q | \
+  xargs -r podman rmi
+'''
+
+["llvmenv:image:probe-toolchain"]
+description = "Run the local image and probe the toolchain"
+# vars = { llvmenv_run_extra_args = " -it" }
+run = '''
+{{ vars.llvmenv_run }} bash -c "
+echo '=== ninja ==='; ninja --version 2>&1; echo;
+echo '=== clang-{{ vars.llvm_version }} ==='; \
+clang-{{ vars.llvm_version }} --version 2>&1; echo;
+echo '=== clang++-{{ vars.llvm_version }} ==='; \
+clang++-{{ vars.llvm_version }} --version 2>&1; echo;
+echo '=== lld-{{ vars.llvm_version }} ==='; \
+ld.lld-{{ vars.llvm_version }} --version --version 2>&1; echo;
+echo '=== cmake ==='; cmake --version 2>&1;
+"
+'''
+
+["llvmenv:image:build-multiarch"]
+dir = "llvmenv"
+run = '''
+set -eu
+M="{{ vars.llvmenv_local_manifest }}"
+
+podman manifest rm --ignore "$M"
+
+podman build --platform linux/amd64 -t "${M}-amd64" -f Containerfile .
+podman build --platform linux/arm64 -t "${M}-arm64" -f Containerfile .
+
+podman manifest create "$M"
+podman manifest add "$M" "containers-storage:${M}-amd64"
+podman manifest add "$M" "containers-storage:${M}-arm64"
+'''
+depends_post = ["llvmenv:image:prune-dangling", "llvmenv:image:save-multiarch"]
+
+["llvmenv:image:save-multiarch"]
+description = "Export local image (multi-arch) to OCI layout directory"
+dir = "llvmenv"
+run = '''
+set -euo pipefail
+out="multiarch-oci"
+
+mkdir -p "$out"
+rm -rf "${out:?}"/*
+
+podman manifest push --all \
+  containers-storage:{{ vars.llvmenv_local_manifest }} \
+  "oci:${out}:{{ vars.llvmenv_image_tag }}"
+'''
+
+["llvmenv:image:push"]
+usage = '''
+arg "<registry>"
+flag "--v2s2" help="Push using Docker v2s2 format instead of default OCI (podman only)"
+flag "--with <tool>" help="Specify push tool: podman (default) or skopeo"
+'''
+shell = "bash -c"
+run = '''
+set -euo pipefail
+
+registry="$usage_registry"
+tool="${usage_with:-podman}"
+image_ref="${registry}/{{ vars.llvmenv_image_org }}/{{ vars.llvmenv_image_repo }}:{{ vars.llvmenv_image_tag }}"
+# OCI layout produced by save task
+oci_source="oci:{{ vars.llvmenv_multiarch_oci_dir }}:{{ vars.llvmenv_image_tag }}"
+
+case "$tool" in
+  skopeo)
+    # --multi-arch all: copy every platform in the index
+    skopeo copy --multi-arch all "$oci_source" "docker://${image_ref}"
+    ;;
+  podman)
+    format_args=()
+    if [ "${usage_v2s2:-false}" = "true" ]; then
+      format_args=(--format v2s2)
+    fi
+    # --all: push all platforms, not just host arch
+    podman manifest push --all ${format_args[@]+"${format_args[@]}"} \
+      "$oci_source" "docker://${image_ref}"
+    ;;
+  *)
+    echo "unknown --with tool: '$tool' (expected 'podman' or 'skopeo')" >&2
+    exit 2
+    ;;
+esac
+'''
+
+["llvmenv:image:push-all"]
+description = "Push to all registries concurrently via mise native parallel tasks"
+env = { MISE_JOBS = "6" }
+run = [
+  { tasks = [
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_hwc_qd }} --with=skopeo",
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_hwc_sh_1 }} --with=skopeo",
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_tc }} --with=skopeo",
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_aliyun }} --with=skopeo",
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_quay }} --with=skopeo",
+    "llvmenv:image:push {{ vars.llvmenv_image_registry_ghcr }} --with=skopeo",
+  ] },
+]
+
+["llvmenv:image:pull"]
+description = "Pull the LLVM {{ vars.llvm_version }} build image from a registry and retag it as the local build image (overwrites build-local)"
+usage = '''
+arg "<registry>"
+'''
+shell = "bash -c"
+run = '''
+set -euo pipefail
+
+image_ref="${usage_registry}/{{ vars.llvmenv_image_org }}/{{ vars.llvmenv_image_repo }}:{{ vars.llvmenv_image_tag }}"
+podman pull "$image_ref"
+# same tag as build-local; retagging overwrites any local image built by build-local
+podman tag "$image_ref" "{{ vars.llvmenv_image_tag }}"
+'''
+depends_post = ["llvmenv:image:prune-dangling"]
+
+["llvmenv:image:pull-hwc-qd"]
+description = "Pull from HWC Qingdao and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_hwc_qd }}"] }]
+
+["llvmenv:image:pull-hwc-sh-1"]
+description = "Pull from HWC Shanghai-1 and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_hwc_sh_1 }}"] }]
+
+["llvmenv:image:pull-tc"]
+description = "Pull from Tencent Cloud and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_tc }}"] }]
+
+["llvmenv:image:pull-aliyun"]
+description = "Pull from Aliyun and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_aliyun }}"] }]
+
+["llvmenv:image:pull-quay"]
+description = "Pull from Quay.io and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_quay }}"] }]
+
+["llvmenv:image:pull-ghcr"]
+description = "Pull from GHCR and retag as the local build image"
+run = [{ tasks = ["llvmenv:image:pull {{ vars.llvmenv_image_registry_ghcr }}"] }]

@@ -1,23 +1,31 @@
 [settings]
-lockfile = true
 task.quiet = true
-
-[tools]
-"cargo:submod" = "latest"
 
 [env]
 _.path = ["{{ vars.llvm_home }}/bin"]  # prepend to shell (`mise activate` tells) PATH
-LLVM_SYS_120_PREFIX = "{{ vars.llvm_home }}"
+# LLVM_SYS_120_PREFIX = "{{ vars.llvm_home }}"
 
 # mise renders vars top-down
 [vars]
 llvm_version = "12"
 llvm_home = "/usr/local/llvm-{{ vars.llvm_version }}"
 llvm_root = "{{ config_root }}/third-party/llvm-project"
+llvm_sparse_paths = "/llvm/ /.gitignore"
 llvmenv_image_base_distro = "ubuntu"
 llvmenv_image_base_version = "22.04"
 llvmenv_image_base = "{{ vars.llvmenv_image_base_distro }}{{ vars.llvmenv_image_base_version }}"
-llvmenv_image_tag = "llvm{{ vars.llvm_version }}:{{ vars.llvmenv_image_base }}"
+llvmenv_image_tag = "{{ vars.llvm_version }}-{{ vars.llvmenv_image_base }}"
+llvmenv_image_registry_hwc_qd = "swr.cn-east-5.myhuaweicloud.com"
+llvmenv_image_registry_hwc_sh_1 = "swr.cn-east-3.myhuaweicloud.com"
+llvmenv_image_registry_tc = "ccr.ccs.tencentyun.com"
+llvmenv_image_registry_aliyun = "crpi-y7qpip8hchxrp368.cn-hangzhou.personal.cr.aliyuncs.com"
+llvmenv_image_registry_quay = "quay.io"
+llvmenv_image_registry_ghcr = "ghcr.io"
+llvmenv_image_org = "minghu6"
+llvmenv_image_repo = "llvm-builder-image"
+llvmenv_local_manifest = "localhost/{{ vars.llvmenv_image_org }}/{{ vars.llvmenv_image_repo }}:{{ vars.llvmenv_image_tag }}"
+llvmenv_multiarch_oci_dir = "{{ config_root }}/llvmenv/multiarch-oci"
+
 llvmenv_run_head = """
 podman run --rm --userns=keep-id \
   -v "{{ vars.llvm_root }}":/llvm-project \
@@ -36,3 +44,4 @@ llvm_cmake_static_flags = """\
 -DLLVM_USE_LINKER=lld-{{ vars.llvm_version }} \
 -DLLVM_INCLUDE_DOCS=OFF \
 """
+inkwell_root = "{{ config_root }}/third-party/inkwell"

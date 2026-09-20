@@ -9,198 +9,75 @@
 
 [Tutorials](./tutorials/)
 
-## Dependencies
+## Development Setup
 
-*方便起见，目前开发和运行环境是Linux，但其实是面向所有POSIX系统*
+*方便起见，目前开发和运行环境是 Linux，但其实是面向所有 POSIX 系统。*
 
-### LLVM-12
+开发工作流由 [mise](https://mise.jdx.dev/) 的任务驱动，`.mise/config.toml` 集中定义环境变量与模板变量，任务定义分散在 `.mise/tasks/*.toml`。
 
-如果使用的 Linux 发行版的仓库里恰好有一个 LLVM-12 的包，那么直接安装就是一个选择，但如果没有，或者想要更加控制地编译想要的版本，那么就需要从源代码开始编译。
+### Setting up Rust nightly
 
-### Compile LLVM-12
+`nightly-2026-08-07`（commit `1a98b1e13`）
 
-首先获取 LLVM-12 的源代码，但是该死的 LLVM 仓库里对应v12的代码居然有非常低级的Bug，于是我fork了源代码仓库，并做了修改。
+### Setting up LLVM-12
 
-`git clone --single-branch -b release/12.x.m6.fix --depth 1 https://github.com/minghu6/llvm-project-m6.git third-party/llvm-project`
+如果使用的 Linux 发行版的仓库里恰好有一个 LLVM-12 的包，那么直接安装就是可以，只要确保 `llvm-config` 在 `PATH` 上或者 `LLVM_SYS_120_PREFIX` 环境变量指向 LLVM 的安装位置。
 
-构建过程和详细参数配置可以参考[clang子项目的building介绍](https://clang.llvm.org/get_started.html)，写得比 LLVM 本家项目要好。
+对于 Ubuntu，发行版 20.04-22.04 的仓库有收录，而 [LLVM 官方]( apt.llvm.org)对于 16.04-21.10 也有 deb 安装包。
 
-#### Install Build Tools
+但对于较新的操作系统，不但没有预编译的二进制包，而且缺乏源代码的编译环境，因为源代码的正确性依赖于特定版本的工具链，而工具链的版本又和发行版绑定，所以这里使用了容器镜像来固化编译环境并用脚本打包运行时，以实现自包含，以这样的方式从源代码开始构建本地 LLVM-12。
 
-`sudo apt install -y build-essential ninja-build cmake clang lld zlib1g-dev`
+>可以直接拉取已经构建好的镜像，通过 mise 任务 `llvmenv:image:pull`。
 
-#### Generate Build Configure
+*容器引擎是 `podman`。*
 
-**Out-of-tree build**
+| Registry | Platforms | Task |
+| :--- | :--- | :--- |
+| [![GHCR](https://img.shields.io/badge/GHCR-181717?logo=github&logoColor=white)](https://ghcr.io/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-ghcr` |
+| [![Quay.io](https://img.shields.io/badge/Quay.io-blue?logo=redhat&logoColor=white)](https://quay.io/repository/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-quay` |
+| [![Huawei Cloud Qingdao](https://img.shields.io/badge/Huawei%20Cloud%20Qingdao-red?logo=huawei&logoColor=white)](https://swr.cn-east-5.myhuaweicloud.com/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-hwc-qd` |
+| [![Huawei Cloud Shanghai-1](https://img.shields.io/badge/Huawei%20Cloud%20Shanghai--1-red?logo=huawei&logoColor=white)](https://swr.cn-east-3.myhuaweicloud.com/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-hwc-sh-1` |
+| [![Tencent Cloud](https://img.shields.io/badge/Tencent%20Cloud-006EFF?logo=docker&logoColor=white)](https://ccr.ccs.tencentyun.com/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-tc` |
+| [![Alibaba Cloud](https://img.shields.io/badge/Alibaba%20Cloud-FF6A00?logo=alibabacloud&logoColor=white)](https://crpi-y7qpip8hchxrp368.cn-hangzhou.personal.cr.aliyuncs.com/minghu6/llvm-builder-image) | ![amd64](https://img.shields.io/badge/-amd64-darkgrey?style=flat-square) ![arm64](https://img.shields.io/badge/-arm64-grey?style=flat-square) | `llvmenv:image:pull-aliyun` |
 
-```bash
-mkdir llvm-12-build # (in-tree build is not supported)
-cd llvm-12-build
-```
+>或者从 Containerfile 开始构建本地镜像，通过 mise 任务 `llvmenv:image:build-local`。
 
-有几个需要关注的配置项（[详细参考](https://llvm.org/docs/CMake.html#llvm-related-variables)）：
+由于官方源代码存在低级 Bug，因此自己维护了一份儿修复后的克隆仓库 `llvm-project`，通过子模块嵌入本项目；
+同时对既有的 Rust 对 LLVM 的高级包装 `inkwell` 进行了方便开发的上游修改，也形成了克隆仓库，通过子模块嵌入本项目。
+> 拉取子模块，通过 mise 任务 `gitsubmod:init`。
 
-**Build Type**
+>使用镜像环境编译并安装 LLVM
 
-`CMAKE_BUILD_TYPE = Debug | RelWithDebInfo | Release | MinSizeRel`
+| Task | Description |
+| :--- | :--- |
+| `llvmenv:build-llvm:configure` | Out-of-tree config  |
+| `llvmenv:build-llvm:build` | Builds with auto-calculated jobs and memory limits to prevent host swap. |
+| `llvmenv:build-llvm:install` | Installs to prefix, bundles runtime libs, and fixes `RPATH` for container independence. |
+| `llvmenv:build-llvm:reconfigure` | In-place reconfigure after CMake var changes. |
+| `llvmenv:build-llvm:reconfigure-fresh` | Wipes `CMakeCache.txt` and reconfigures from scratch (for toolchain changes). |
 
-Debug：如果既需要 Debug LLVM生成的代码，又需要 Debug LLVM 本身
-RelWithDebInfo： 仅需要 Debug LLVM生成的代码
-Release：只使用
-MinSizeRel：只使用，而且减少空间占用
+- **configure**：链接并发由 `build-resource-config configure` 按总内存给出。
+- **build**：`build-resource-config build` 按当前可用内存和 CPU 核数算出 ninja 的 `-j` 与容器 `--memory/--memory-swap`，避免把宿主拖进 SWAP。
+- **install**：安装前缀（ `/usr/local/llvm-12`）由 `bundle-runtime-libs` 把 LLVM 二进制依赖的外部共享库（`libz`、`libtinfo`、`libxml2` 等）复制进前缀并改写 `RPATH`，使这个前缀脱离构建容器也能独立使用。
 
-**Compiler & Linker**
+### Running Tests
 
-`CMAKE_CXX_COMPILER = clang++ | g++ (default)`
-
-`DCMAKE_C_COMPILER = clang | gcc (default)`
-
-`DLLVM_USE_LINKER = lld | ld (default)`
-
-clang 项目生成代码的优化水平比 gcc 项目还是强不少的，特别是使用 lld ，可以使 LLVM 的构建速度加快不少。
-
-**Build System**
-
-`G: Ninja | Unix Makefiles | Visual Studio | Xcode`
-
-对本项目的 Linux 来说实际就是 Ninja 和 Unix Makefiles
-
-Ninja 构建更快，但是要小心配置，否则它会吃掉你机器的所有资源，一家伙把你的用户会话挂掉。(可以参考[这里](https://github.com/ninja-build/ninja/issues/2187)和[这里](https://github.com/ninja-build/ninja/issues/1441))
-
-*from abstract to real*
-
-```bash
-cmake -DCMAKE_POLICY_DEFAULT_CMP0116=OLD \
-    -DCMAKE_CXX_FLAGS="-Wno-deprecated -Wno-bitwise-instead-of-logical -Wno-deprecated-copy" \
-    -DCMAKE_CXX_STANDARD=17 \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_C_COMPILER=clang \
-    -DLLVM_USE_LINKER=lld \
-    -G "Ninja" \
-    ../third-party/llvm-project/llvm
-```
-
-如果要更换工具链，那么需要 cmake 前面传入一个 `--fresh` 参数，来移除所有的 `CMakeCache.txt` ，但这也意味着要完全重新进行编译，所以开始工具链的选择要慎重。
-
-#### Build
-
-这里不通过 cmake 而直接调用构建工具是为了方便配置参数，特别是如果前面没用 `LLVM_PARALLEL_{COMPILE,LINK,TABLEGEN}_JOBS` 指定并发数量。
-
-个人经验，有几个编译和链接任务存在内存瓶颈，可能需要手动降低下并发数，进而降低内存消耗，避免内存不足或者进入SWAP，特别是如果编译得是 Debug 版本。
-
-另外注意，ninja 默认跑满最大并发我们最好手动指定并发数，而 make 默认不并发。
-
-```bash
-ninja -j3  # cmake --build .
-```
-
-#### Install
-
-假设目录安装在 `/usr/local/llvm-12` 上。
-
-```bash
-sudo cmake -DCMAKE_INSTALL_PREFIX=/usr/local/llvm-12 -P cmake_install.cmake
-```
-
-#### Configure
-
-最体面的方式应该是提前考虑对多个版本的 LLVM 的管理问题，但是没有一个成熟又普适的现成管理工具，于是考虑最小化代价的解决方案，通过管理环境变量的方式做版本管理。
-
-可以开发一个工具，就像是 pyenv，rbenv 做的那样，但为了节约时间和精力，直接试用下现成的基于目录配置环境变量的工具 direnv 。
-
-#### [direnv](https://direnv.net/)
-
-在我们的项目目录或者某个合适层级的父目录下创建我们的环境配置文件 `.envrc`
-
-```bash
-# LLVM
-export LLVM_ROOT="/usr/local/llvm-12"
-export PATH="$LLVM_ROOT/bin:$PATH"
-export LLVM_SYS_120_PREFIX=$LLVM_ROOT
-```
-对于我们项目来说，只需要配置 `LLVM_SYS_120_PREFIX` 或者 包含 `llvm_config` 的 `PATH` 即可，全都配置只是便于它用。
-
-但是这里要提一个恼人的问题，direnv 每次加载配置文件都会有丑陋的强制提示，官方配置也不能彻底取消，可以在 shell session 的初始化文件里紧接着 direnv hook 之后覆盖相关函数。
-
-```bash
-eval "$(direnv hook bash)"
-
-copy_function() {
-    test -n "$(declare -f "$1")" || return
-    eval "${_/$1/$2}"
-}
-
-copy_function _direnv_hook _direnv_hook__old
-
-_direnv_hook() {
-    _direnv_hook__old "$@" 2> /dev/null
-}
-```
-`_direnv_hook` 是 direnv 内部 hardcode 的 shell 函数。
-
-并且（后来发现）由于 direnv 劫持了 shell ，导致其他基于路径（`PATH`）插值的版本管理工具无法正常工作，因此只能限制 direnv 自动加载的范围。
-
-`~/.config/direnv/direnv.toml`
-
-```Toml
-[global]
-# https://direnv.net/man/direnv.toml.1.html
-hide_env_diff = true
-
-[whitelist]
-prefix=["~/coding/Rust"]
-```
-这里就把目录限制在 `~/coding/Rust` 目录下面。
-
-其实理论上 direnv 的天才想法是用户每次手动 `direnv allow` 去允许加载一个目录的 `.envrc`，然后用 `direnv disallow`（它还有两个别名叫做 `deny` 和 `revoke`） 去撤回对环境变量的加载，可与其这样，那还不如我们自己写一个保存和恢复环境变量的脚本，我们需要得是自动静默加载，就像其他版本管理工具做的那样，所以这里直接把目录加到白名单里。
-
-
-*如果在使用`direnv`的过程中，发现它到处都很怪很难用，不用担心，这是正常现象，因为它是一个用Go写的用户程序。Go的哲学就是“当下能凑活用就行”，也是一种美国后现代工程文化的代表。如果在一个多语言项目里其他项目都成功了，只有一个语言的项目失败了，那它就是Go的项目，比如对编译好的LLVM运行测试，大概会发现只有Go的测试失败了，不用在意，也不必浪费时间寻找原因，完全就是Go自己的用户接口的健壮性问题。*
-
-### Co-operation Projects
-
-#### inkwel-m6
-
-对官方 [inkwell](https://github.com/TheDan64/inkwell) 的 fork 版本，方便控制版本变化。
-它是对上游 [llvm-sys](https://crates.io/crates/llvm-sys) 的高级抽象， llvm-sys 通过指定环境变量 `LLVM_SYS_<VERSION>_PREFIX` 或者调用 `PATH` 上的 `llvm-config` ，直接绑定具体的 LLVM（的 C API）。
-
-已作为子模块引入到 `third-party/inkwell`：
-
-`git submodule update --init third-party/inkwell`
-
-#### inkwellkit
-
-对 `inkwell` 的工具包，主要是提供了一些预处理宏，方便做代码 binding 。
-
-源码随项目一起提交，位于顶层 `inkwellkit/`（预处理宏在其子目录 `inkwellkit/proc_macros/`，crate 名 `inkwellkit_macros`），本地改动即时生效，无需额外获取步骤。
-
-#### lexkit
-
-词法分析工具包
-
-`git clone https://github.com/minghu6/m6lexerkit.git`
-
-#### parserkit
-
-语法分析工具包
-
-`git clone https://github.com/minghu6/m6parserkit.git`
-
+| Task | Description |
+| :--- | :--- |
+| `bas:test:codegen` | Runs codegen test with `--nocapture`. |
+| `bas:test:boot` | Runs boot test with `RUST_BACKTRACE=1`. |
+| `bas:test:spec` | Runs spec test with `--nocapture`. |
 
 ## Demos
 
 [Demo files](./examples/)
 
-`make testexp0`
-
-*编译器的运行不依赖 LLVM ，代价是较大的空间占用，不过这对现代通用型编译器来说是科学的 Trade Off，进一步的讨论在[这里]()。*
+| Task | Description |
+| :--- | :--- |
+| `basc:verify:exp0` | Compiles `exp0`, then runs `./exp0`. |
+| `basc:verify:test_sepc` | Compiles the `test_spec` example (check failure output). |
 
 ## Follow-Up
-
-## Recommend
-
-cargo-override 快速智能patch 远程 到 本地仓库 来方便调试代码
 
 ### Design
 
@@ -225,3 +102,4 @@ cargo-override 快速智能patch 远程 到 本地仓库 来方便调试代码
 6. 实现一个合适的机制，包括对源文件的无注解的语法树的序列化，和缓存既有语法树的编译文件，使得可以作为脚本语言方便运行，高级任务；
 7. 增加一套 IO 的标准库函数，便于完成基本的文本处理工作， 高级任务；
 8. 按照 DWARF 格式在 LLVM 生成代码时嵌入 Debug 信息，繁琐的高级任务；
+9. `cmd` 依赖 POSIX exec 实现，绑定了 `sh`，可以改进为灵活支持 `bash` 等更多 shell，繁琐的中级任务；

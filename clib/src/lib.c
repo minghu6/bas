@@ -107,3 +107,7 @@ char* exec(const char* cmd) {
   pclose(pipe);
   return cstr_into(result);
 }
+
+void flush_stdout(void) {
+  fflush(stdout);
+}

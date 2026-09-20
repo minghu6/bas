@@ -10,5 +10,6 @@ char* stringify_f64(double src);
 
 char* cmd_symbols_replace(char* src, Vec syms, Vec strs);
 char* exec(const char* cmd);
+void flush_stdout(void);
 
 #endif

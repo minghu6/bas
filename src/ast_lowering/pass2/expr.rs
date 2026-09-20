@@ -433,12 +433,15 @@ impl SemanticAnalyzerPass2 {
         let exec_fndec = self.find_func_by_name(str2sym("exec")).unwrap();
 
         let exec_res = self.bind_value(exec_fndec.fn_call_val(&[cmd_sym]));
-        let ctlstr = self.build_const_str(str2sym("%s\n"));
+        let ctlstr = self.build_const_str(str2sym("%s"));
 
         // print stdout
         let printf_fndec = self.find_func_by_name(str2sym("printf")).unwrap();
 
-        printf_fndec.fn_call_val(&[ctlstr, exec_res])
+        self.bind_value(printf_fndec.fn_call_val(&[ctlstr, exec_res]));
+
+        let flush_fndec = self.find_func_by_name(str2sym("flush_stdout")).unwrap();
+        flush_fndec.fn_call_val(&[])
     }
 
     pub(crate) fn analyze_if_expr(&mut self, tt: &TT) -> AVar {
