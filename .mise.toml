@@ -14,6 +14,7 @@ LLVM_SYS_120_PREFIX = "{{ vars.llvm_home }}"
 llvm_version = "12"
 llvm_home = "/usr/local/llvm-{{ vars.llvm_version }}"
 llvm_root = "{{ config_root }}/third-party/llvm-project"
+llvm_sparse_paths = "llvm/ /.gitignore"
 llvmenv_image_base_distro = "ubuntu"
 llvmenv_image_base_version = "22.04"
 llvmenv_image_base = "{{ vars.llvmenv_image_base_distro }}{{ vars.llvmenv_image_base_version }}"
@@ -36,3 +37,4 @@ llvm_cmake_static_flags = """\
 -DLLVM_USE_LINKER=lld-{{ vars.llvm_version }} \
 -DLLVM_INCLUDE_DOCS=OFF \
 """
+inkwell_root = "{{ config_root }}/third-party/inkwell"

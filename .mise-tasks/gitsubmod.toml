@@ -1,0 +1,62 @@
+#:schema https://mise.jdx.dev/schema/mise-task.json
+
+["gitsubmod:remove"]
+usage = '''
+arg "<submodule-path>" help="submodule-path is always relative to {{ config_root }}"
+'''
+
+run = """
+set -e
+git submodule deinit -f "$usage_submodule_path" || true
+rm -rf .git/modules/"$(basename "$usage_submodule_path")"
+"""
+
+["gitsubmod:init-llvm-project"]
+run = """
+set -e
+
+if [ -n "$(ls -A {{ vars.llvm_root }})" ]; then
+  printf 'submodules already exist in %s; overwrite? [y/N] ' \
+    {{ vars.llvm_root }} >&2;
+  read -r ans
+  case "$ans" in
+    [yY]*)  mise run gitsubmod:remove {{ vars.llvm_root }} ;;
+    *) echo 'aborted' >&2; exit 1 ;;
+  esac
+fi
+
+git -c submodule.llvm-project.update=none submodule update --init \
+  --filter=blob:none --depth 1 {{ vars.llvm_root }}
+git -C {{ vars.llvm_root }} sparse-checkout init --no-cone
+git -C {{ vars.llvm_root }} sparse-checkout set --skip-checks {{ vars.llvm_sparse_paths }}
+git submodule update --init {{ vars.llvm_root }}
+"""
+
+["gitsubmod:init-inkwell"]
+run = """
+set -e
+
+if [ -n "$(ls -A {{ vars.inkwell_root }})" ]; then
+  printf 'submodules already exist in %s; overwrite? [y/N] ' {{ vars.inkwell_root }} >&2;
+  read -r ans
+  case "$ans" in
+    [yY]*)  mise run gitsubmod:remove {{ vars.inkwell_root }} ;;
+    *) echo 'aborted' >&2; exit 1 ;;
+  esac
+fi
+
+git submodule update --init {{ vars.inkwell_root }}
+"""
+
+
+["gitsubmod:update-llvm-project"]
+run = """
+set -e
+
+"""
+
+["gitsubmod:update-inkwell"]
+run = """
+set -e
+
+"""

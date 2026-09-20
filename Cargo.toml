@@ -25,5 +25,5 @@ itertools = "0.10"
 name = "basc"
 path = "bin/basc.rs"
 
-[patch."https://github.com/minghu6/m6syntax"]
-m6parserkit = { path = "../m6syntax/m6parserkit/" }
+# [patch."https://github.com/minghu6/m6syntax"]
+# m6parserkit = { path = "../m6syntax/m6parserkit/" }

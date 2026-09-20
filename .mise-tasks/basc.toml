@@ -19,19 +19,17 @@ arg "[flags]" var=#true help="Extra flags forwarded to basc"
 depends = ["bas:get:basc", "bas:get:lib"]
 run = '''
 set -e
-RUST_BACKTRACE=1 ./basc "./examples/${usage_example?}.bath" "${usage_example?}" ${usage_flags:-}
+RUST_BACKTRACE=1 ./basc "./examples/${usage_example?}.bath" \
+  "${usage_example?}" ${usage_flags:-}
 '''
 
 ["basc:dump"]
-description = "Objdump the output.o"
-run = "objdump -xsd ./output.o"
+description = 'Objdump the output.o'
+run = 'objdump -xsd ./output.o'
 
 ["basc:verify:exp0"]
 depends = ["basc:compile exp0"]
-run = """
-set -e
-./exp0
-"""
+run = './exp0'
 raw = true
 
 ["basc:verify:test_sepc"]

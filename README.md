@@ -25,6 +25,30 @@
 
 构建过程和详细参数配置可以参考[clang子项目的building介绍](https://clang.llvm.org/get_started.html)，写得比 LLVM 本家项目要好。
 
+#### 使用 llvmenv 自动化构建（mise + podman，推荐）
+
+上面的手动步骤被封装成了由 [mise](https://mise.jdx.dev/) 驱动、基于 podman 容器的可复现构建，任务定义在 `.mise-tasks/llvmenv.toml`。它在容器里编译 LLVM-12（不污染宿主工具链），并把一个自包含（self-contained）的前缀安装到由 `vars.llvm_home` 控制的目录（默认 `/usr/local/llvm-12`）。
+
+前置条件：`mise`、`podman`，以及作为子模块的 fork 源码 `third-party/llvm-project`（分支 `release/12.x.m6.fix`）。
+
+```bash
+# 1. 构建构建环境镜像（ubuntu22.04 上的 clang/lld/ninja/cmake）
+mise run llvmenv:build-image
+
+# 2. 配置（out-of-tree，Ninja，静态 dylib，clang + lld）
+mise run llvmenv:build-llvm:configure
+
+# 3. 编译（注意内存；任务通过 build-resource-config 限制链接并发数）
+mise run llvmenv:build-llvm:build
+
+# 4. 安装到前缀，并把外部运行时库一起打包进来，使前缀脱离宿主也能用
+mise run llvmenv:build-llvm:install
+```
+
+install 步骤先用 `cmake -P build/cmake_install.cmake` 把 LLVM 装进前缀，再运行 `bundle-runtime-libs` 把 LLVM 二进制链接到的外部共享库（如 libz、libtinfo、libxml2 等）复制进前缀，从而让工具链不依赖宿主上存在这些库。
+
+消费侧（rust-analyzer / cargo）的环境由 `.mise.toml` 的 `[env]` 提供：它会设置 `LLVM_SYS_120_PREFIX` 并把 `bin` 目录加入 `PATH`。激活 mise（`eval "$(mise activate bash)"`）或用 `mise x -- cargo build` 运行构建，`llvm-sys` / inkwell 就能找到 LLVM。若编辑器（如 rust-analyzer）不是在 mise 已激活的 shell 里启动的，则需显式把前缀交给它——例如在 `.cargo/config.toml` 写 `[env] LLVM_SYS_120_PREFIX = "/usr/local/llvm-12"`，或在编辑器设置里配置 `rust-analyzer.cargo.extraEnv`。
+
 #### Install Build Tools
 
 `sudo apt install -y build-essential ninja-build cmake clang lld zlib1g-dev`
@@ -104,6 +128,8 @@ sudo cmake -DCMAKE_INSTALL_PREFIX=/usr/local/llvm-12 -P cmake_install.cmake
 ```
 
 #### Configure
+
+本项目已通过 `.mise.toml` 的 `[env]` 自动设置 `LLVM_SYS_120_PREFIX` 并把 `bin` 加入 `PATH`，因此只要构建运行在 mise 环境下（激活 mise 或 `mise x --`），无需再手动配置下面的环境变量。下面保留 direnv 作为不使用 mise 时的备选方案。
 
 最体面的方式应该是提前考虑对多个版本的 LLVM 的管理问题，但是没有一个成熟又普适的现成管理工具，于是考虑最小化代价的解决方案，通过管理环境变量的方式做版本管理。
 
