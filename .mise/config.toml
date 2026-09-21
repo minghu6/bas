@@ -2,9 +2,6 @@
 lockfile = true
 task.quiet = true
 
-[tools]
-"cargo:submod" = "latest"
-
 [env]
 _.path = ["{{ vars.llvm_home }}/bin"]  # prepend to shell (`mise activate` tells) PATH
 LLVM_SYS_120_PREFIX = "{{ vars.llvm_home }}"
@@ -19,6 +16,8 @@ llvmenv_image_base_distro = "ubuntu"
 llvmenv_image_base_version = "22.04"
 llvmenv_image_base = "{{ vars.llvmenv_image_base_distro }}{{ vars.llvmenv_image_base_version }}"
 llvmenv_image_tag = "llvm{{ vars.llvm_version }}:{{ vars.llvmenv_image_base }}"
+llvmenv_hwc_image_ref = "swr.cn-east-5.myhuaweicloud.com/"
+
 llvmenv_run_head = """
 podman run --rm --userns=keep-id \
   -v "{{ vars.llvm_root }}":/llvm-project \

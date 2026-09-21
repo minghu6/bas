@@ -2,7 +2,4 @@
 
 lockfile_version = 1
 
-[[tools."cargo:submod"]]
-version = "0.4.0"
-backend = "cargo:submod"
-specifiers = ["latest"]
+[tools]

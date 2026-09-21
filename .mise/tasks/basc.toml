@@ -29,8 +29,8 @@ run = 'objdump -xsd ./output.o'
 
 ["basc:verify:exp0"]
 depends = ["basc:compile exp0"]
-run = './exp0'
 raw = true
+run = './exp0'
 
 ["basc:verify:test_sepc"]
 depends = ["basc:compile test_spec"]

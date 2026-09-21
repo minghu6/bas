@@ -1,40 +1,5 @@
 #:schema https://mise.jdx.dev/schema/mise-task.json
 
-["llvmenv:build-image"]
-description = "Build the local LLVM {{ vars.llvm_version }} build environment image"
-dir = "llvmenv"
-run = """
-podman build -t {{ vars.llvmenv_image_tag }} \
-  --label minghu6.llvmenv.bas={{ vars.llvmenv_image_tag }} \
-  -f Containerfile .
-"""
-depends_post = ["llvmenv:prune-images"]
-
-["llvmenv:prune-images"]
-description = """
-Remove dangling llvmenv images (scoped by label, \
-never touches other projects)"""
-run = """
-podman images --filter label=minghu6.llvmenv.bas --filter dangling=true -q | \
-  xargs -r podman rmi
-"""
-
-["llvmenv:probe"]
-description = "Run the local image and probe the toolchain"
-# vars = { llvmenv_run_extra_args = " -it" }
-run = """
-{{ vars.llvmenv_run }} bash -c "
-echo '=== ninja ==='; ninja --version 2>&1; echo;
-echo '=== clang-{{ vars.llvm_version }} ==='; \
-clang-{{ vars.llvm_version }} --version 2>&1; echo;
-echo '=== clang++-{{ vars.llvm_version }} ==='; \
-clang++-{{ vars.llvm_version }} --version 2>&1; echo;
-echo '=== lld-{{ vars.llvm_version }} ==='; \
-ld.lld-{{ vars.llvm_version }} --version --version 2>&1; echo;
-echo '=== cmake ==='; cmake --version 2>&1;
-"
-"""
-
 ["llvmenv:build-llvm:configure"]
 description = "Configure LLVM {{ vars.llvm_version }} build"
 dir = "llvmenv"

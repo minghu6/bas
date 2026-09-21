@@ -33,7 +33,7 @@
 
 ```bash
 # 1. 构建构建环境镜像（ubuntu22.04 上的 clang/lld/ninja/cmake）
-mise run llvmenv:build-image
+mise run llvmenv:image:build
 
 # 2. 配置（out-of-tree，Ninja，静态 dylib，clang + lld）
 mise run llvmenv:build-llvm:configure
@@ -251,3 +251,4 @@ cargo-override 快速智能patch 远程 到 本地仓库 来方便调试代码
 6. 实现一个合适的机制，包括对源文件的无注解的语法树的序列化，和缓存既有语法树的编译文件，使得可以作为脚本语言方便运行，高级任务；
 7. 增加一套 IO 的标准库函数，便于完成基本的文本处理工作， 高级任务；
 8. 按照 DWARF 格式在 LLVM 生成代码时嵌入 Debug 信息，繁琐的高级任务；
+9. `cmd` 依赖 POSIX exec 实现，绑定了 `sh`，可以改进为灵活支持 `bash` 等更多 shell，繁琐的中级任务；
